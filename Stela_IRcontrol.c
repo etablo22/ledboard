@@ -948,7 +948,7 @@ void SetCountTabs(uint8_t func)
 	}
 }
 
-//Задаем значения на выбранном табло в режиме настроек или же выбираем следующее табло при повторном нажатии на Power
+//Задаем значения на выбранном табло в режиме редактирования или же выбираем следующее табло при повторном нажатии на Power
 //ДОПИЛИТЬ
 void SetSettingsFromIrControl(uint8_t func)
 {
@@ -956,20 +956,24 @@ void SetSettingsFromIrControl(uint8_t func)
 		//нажатие кнопки Power повторно
 		case RC5POWER: {
 			_flash_LED1(1, 30);
+			if (Ntab == 1) EepromWritePrice(); //сохранили цену табло в еепром - только если редактировали первое табло
 			Ntab++;
+		//проверка на превышение Ntab>qtTab
 			TxDATA(BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT], BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT]); //устанавливаем среднюю яркость в режиме программирования на всех табло
 			DoBlinking(Ntab); //начинаем моргать текущим табло
 			CountDigitButtonClick = 0;
-			EepromWritePrice(); //сохранили цену табло в еепром
+//			EepromWritePrice(); //сохранили цену табло в еепром - только если редактировали первое табло
 			break;
 		}
 		case RC5OK: {
 			_flash_LED1(1, 30);
+			if (Ntab == 1) EepromWritePrice(); //сохранили цену табло в еепром - только если редактировали первое табло
 			Ntab--;
+		//проверка на превышение Ntab<1
 			TxDATA(BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT], BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT]); //устанавливаем среднюю яркость в режиме программирования на всех табло
 			DoBlinking(Ntab); //начинаем моргать текущим табло
 			CountDigitButtonClick = 0;
-			EepromWritePrice(); //сохранили цену табло в еепром
+//			EepromWritePrice(); //сохранили цену табло в еепром
 			break;
 		}
 		case RC5DIG0: {
@@ -1025,6 +1029,7 @@ void EepromWritePrice()
 	for (j = 0; j < 4; j++)
 	eeprom_write_byte(EEDigit + j, Digit[j]);
 	sei();
+	//добавить команду TX на сохранение в ЕЕ на редактируемом табло
 }
 
 void DoButtonClickIrControl(uint8_t buttonCode)
@@ -1143,7 +1148,7 @@ void ProgrammingModeButtonClick(uint8_t _nTab) {
 	Ntab = _nTab; //номер текущего табло
 	TxDATA(BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT], BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT]); //устанавливаем среднюю яркость в режиме программирования на всех табло
 	DoBlinking(Ntab); //начинаем моргать текущим табло (самым первым по индексу Ntab, выше = 1)
-	doTimer = cntT1 + ONEMIN;
+	doTimer = cntT1 + ONEMIN;		//плюс одна минута на редактирование
 	while (cntT1 < doTimer) {
 		if (rc5_data)
 		{
@@ -1151,6 +1156,8 @@ void ProgrammingModeButtonClick(uint8_t _nTab) {
 			Rfunc = ((j & 0x3F) | (~j >> 7 & 0x40)); //Выделяем только код команды
 			RCommand(Rfunc, isSettingsMode);//парсим команду с ИК
 			rc5_data=0;
+			doTimer = cntT1 + ONEMIN;		//плюс одна минута на редактирование
 		}
+		_delay_ms(10);	//иначе while не сработает 
 	}
 }
