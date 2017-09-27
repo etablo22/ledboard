@@ -14,15 +14,15 @@
 20170916    :   надо проверить рефактор по этой функции  -  uint8_t USART_handle(void)  -  поубирал много лишнего, отрефакторил
 
 20170919	:	изменил в Ind_lib_v2.1.h значение параметра LED_TYPE 5
-				значение DISPLAY = TabloUpdatePeriod
-			переименование DISPLAY в TabloUpdateTime
-				для тестирования Digit[0]++; в процедуре обновления табло
-				добавление #define TabloUpdatePeriod
-				CountDigitButtonClick - счетчик нажатия цифровых кнопок ИК-пульта от 1 до 4; при первом нажатии CountDigitButtonClick==0;
-				смещение курсора при вводе цены при нажатии цифровых кнопок: CountDigitButtonClick++;
-				ввод значений в массив DigTmp[CountDigitButtonClick]=RC5DIG_num
-				код в процедуре case RC5DIG0: {...} надо вынести в функцию
-				
+значение DISPLAY = TabloUpdatePeriod
+переименование DISPLAY в TabloUpdateTime
+для тестирования Digit[0]++; в процедуре обновления табло
+добавление #define TabloUpdatePeriod
+CountDigitButtonClick - счетчик нажатия цифровых кнопок ИК-пульта от 1 до 4; при первом нажатии CountDigitButtonClick==0;
+смещение курсора при вводе цены при нажатии цифровых кнопок: CountDigitButtonClick++;
+ввод значений в массив DigTmp[CountDigitButtonClick]=RC5DIG_num
+код в процедуре case RC5DIG0: {...} надо вынести в функцию
+
 
 */
 
@@ -72,13 +72,13 @@
 #define ADCLUXCH	7
 #define LUM1		2048
 #define LUM2		16384
-#define MIDDLE_BRIGHT 5
+#define MIDDLE_BRIGHT 3
 // #define BRIGHT1		0x05
 // #define BRIGHT2		0x50
 // #define BRIGHT3		0xC0
 
 //общие константы
-#define TabloUpdatePeriod		1000	//1 ед. = 4,4мс при TCCRB = 0x01 в _UPDATEDATA() : initT1(0x01)
+#define TabloUpdatePeriod		2	//1 ед. = 4,4мс при TCCRB = 0x01 в _UPDATEDATA() : initT1(0x01)
 
 // пороги перехода времени суток
 #define MORNING_HOUR	7
@@ -115,11 +115,11 @@
 #define RC5MENU			63
 
 
-uint8_t const DASHCODE = 12;
+uint8_t const DASHCODE = 10;
 uint16_t j = 0, it1 = 0;
 unsigned long long cntT1 = 0;
 unsigned long long doTimer = 0;
-uint32_t const ONEMIN = 60000;
+uint32_t const ONEMIN = 5;
 uint8_t dispcounter, OCRtest, cntT0;
 uint8_t cnt_btn0, cnt_btn1;
 int8_t TestCNT, INITtab = 0;
@@ -132,18 +132,18 @@ uint8_t isSettingsMode = 0; //флаг что мы находимся в реж�
 uint8_t isSettingsModeOver = 0; //флаг выхода из режима настроек
 uint8_t CountDigitButtonClick = 0; //флаг первичного нажатия на клавишу цифры на ИК пульте (для обнуления текущего выбранного табло)
 
-uint8_t Digit[4]={1,2,3,4}, PointMask=0x0F, DigTmp[4], nDig;
-uint8_t EEMEM EEDigit[4] = {1, 2, 3, 4}, 
-			  EEDsort[5] = {0, 1, 2, 3, 0x0F}, 
-			  EEdata[5] = {1, 255, 0, 0, 101};
+uint8_t Digit[4]={5, 6, 7, 8}, PointMask=0x0F, DigTmp[4], nDig;
+uint8_t EEMEM EEDigit[4] = {1, 2, 3, 4},
+EEDsort[5] = {0, 1, 2, 3, 0x0F},
+EEdata[5] = {1, 255, 0, 0, 101};
 
 uint8_t EEMEM EEBriData[3] = {20, 95, 214}; //уровень яркости {ночной,средний, дневной}
 
-uint8_t BriMode, 
-		preBriMode, 
-		BriLevels[3] = {20, 95, 214}, 
-		BriValues[12] = {20, 30, 40, 50, 62, 77, 95, 118, 146, 181, 214, 250}, 
-		BriStep;
+uint8_t BriMode,
+preBriMode,
+BriLevels[3] = {20, 95, 214},
+BriValues[12] = {5, 30, 40, 50, 62, 77, 95, 118, 146, 181, 214, 250},
+BriStep;
 
 
 //EEdata - 4Б: данные для настройки табло
@@ -464,23 +464,22 @@ void set_Bright(uint16_t val, uint8_t param)
 		//действия при изменении яркости по команде:
 		//сброс измерения освещенности и настройка записи режимов яркости в ЕЕ
 		case 3: {
-			ADCENABLE = 0;	//остановка автоматического изменения яркости, запуск через неск.секунд в модуле if(DISPLAY)
+			ADCSTART=cntT1 + 30000;	//остановка автоматического изменения яркости, запуск через неск.секунд в модуле if(DISPLAY)
 			WRITEEEBRI = 0;	//исключить лишнюю запись в ЕЕ -
 			CHBRI = 1;		//разрешение WRITEEEBRI через неск.секунд в case 1 и case 2
 			TXBRIDATA = 1;	//отправка значения яркости на ведомые табло
 			break;
 		}
-		//
+		//установить яркость = val на всех табло
 		case 4: {
-			TxDATA(BROADCAST, BRIGHT, BriValues[5], BROADCAST, BRIGHT, BriValues[5]);			//установить среднюю яркость на всех табло
-			TxDATA(TADR0 + Ntab, BRIGHT, BriValues[10], TADR0 + Ntab, BRIGHT, BriValues[10]);		//увеличить яркость на редактируемом табло
-			
-			if (TADR0 + Ntab == TADR) {					//если текущее табло, то
-				BriLevels[BriMode] = BriValues[0];				//уменьшить яркость
-				set_Bright(BriLevels[BriMode], 3);		//так же произойдет требуемое отключение измерения освещенности
-				WREEN = 0;								//запретить запись в ЕЕ, чтобы не сохранилось значение яркости
-			}
-			_LED1(0);
+			TXBRIDATA = 1;	//установить яркость = val на всех табло по флагу TXBRIDATA
+			ADCSTART=cntT1 + ONEMIN;	//остановка автоматического изменения яркости, запуск через минуту
+			BriLevels[BriMode] = val;				//
+			break;
+		}
+		case 5: {
+			ADCSTART=cntT1 + ONEMIN;	//остановка автоматического изменения яркости, запуск через минуту
+			BriLevels[BriMode] = val;				//
 			break;
 		}
 	}
@@ -592,23 +591,47 @@ void COMMANDS(uint8_t func) {
 
 uint8_t USART_handle(void)
 {
-	uint8_t CORRECT = 1;
+	// 	uint8_t CORRECT = 1;
+	// 	getADR = USART_GetChar();	//чтение байта 1: адрес
+	//
+	// 	//если не широковещательный и сравнение с адресом контроллера
+	// 	if (getADR != BROADCAST && getADR == TADR) {
+	// 		//выполнение при совпадении адреса
+	// 		_delay_ms(200);		//дополнительная задержка для загрузки байта
+	// 		if (USART_GetRxCount()) {
+	// 			UARTcommand = USART_GetChar();	//чтение адресной команды
+	// 		}
+	// 		else CORRECT = 0;
+	// 	}
+	// 	else if (USART_GetRxCount()) {	//если широковещательный адрес
+	// 		_delay_ms(200);			//дополнительная задержка для загрузки байта
+	// 		UARTcommand = USART_GetChar();	//чтение широковещательной команды
+	// 	}
+	// 	else CORRECT = 0;
+	// 	return CORRECT;
+
+	uint8_t CORRECT=1;
 	getADR = USART_GetChar();	//чтение байта 1: адрес
-	
-	//если не широковещательный и сравнение с адресом контроллера
-	if (getADR != BROADCAST && getADR == TADR) {
-		//выполнение при совпадении адреса
-		_delay_ms(200);		//дополнительная задержка для загрузки байта
-		if (USART_GetRxCount()) {
-			UARTcommand = USART_GetChar();	//чтение адресной команды
+	if (getADR!=BROADCAST) {	//если не широковещательный
+		if (getADR==TADR) {		//сравнение с адресом контроллера
+			//выполнение при совпадении адреса
+			if (USART_GetRxCount()) UARTcommand = USART_GetChar();	//чтение адресной команды
+			else {
+				_delay_ms(200);		//дополнительная задержка для загрузки байта
+				if (USART_GetRxCount()) UARTcommand = USART_GetChar();
+				else CORRECT=0;
+			}
 		}
-		else CORRECT = 0;
+		else CORRECT=0;
 	}
-	else if (USART_GetRxCount()) {	//если широковещательный адрес
-		_delay_ms(200);			//дополнительная задержка для загрузки байта
+	else if (USART_GetRxCount()){	//если широковещательный адрес
 		UARTcommand = USART_GetChar();	//чтение широковещательной команды
 	}
-	else CORRECT = 0;
+	else {
+		_delay_ms(200);			//дополнительная задержка для загрузки байта
+		if (USART_GetRxCount()) UARTcommand = USART_GetChar();
+		else CORRECT=0;
+	}
 	return CORRECT;
 }
 
@@ -695,7 +718,7 @@ void _UPDATEDATA(void)
 	initBTN();			//обработка в T1_OVF
 	init595();
 	initPWM();
-	initT1(0x01);		//16-битный, clk/1, период OVF 4,4мс
+	initT1(0x04);		//16-битный, clk/1, период OVF 4,4мс
 	adc_init();
 	USART_Init(USART_DOUBLED, 19200);
 	USART_FlushTxBuf();
@@ -820,9 +843,11 @@ int main(void)
 		if (cntT1 == TabloUpdateTime) {
 			_LED1(1);
 			TabloUpdateTime = cntT1 + TabloUpdatePeriod;
-// 			Digit [0]++;
-			display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], 0x0F);	//прямое отображение
-			ADCENABLE = 1;
+			if (Digit[3] == 9) {
+				Digit[3] = 0;
+			}
+			
+			display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3]++, 0x0F);	//прямое отображение
 			_delay_ms(1);
 			_LED1(0);
 		}
@@ -832,14 +857,6 @@ int main(void)
 		{
 			ADCSTART=cntT1 + 20;	//примерно с периодом 0,08(8)сек
 			ADCluxmeter(ADCLUXCH);
-		}
-
-		//отправка широковещ-й команды установки яркости на табло
-		//фильтр с проверкой двух младших битов
-		if (TXBRIDATA && (TXDATAEN & 0x01) && (TXDATAEN & 0x02)) {
-			//если глобально разрешена передача по RS485
-			TXBRIDATA = 0;
-			TxDATA(BROADCAST, BRIGHT, BriLevels[BriMode], BROADCAST, BRIGHT, BriLevels[BriMode]);
 		}
 
 		//чтение значения яркости из ЕЕ в ОЗУ
@@ -853,7 +870,16 @@ int main(void)
 			BriLevels[2] = eeprom_read_byte(EEBriData + 2); //дневная яркость
 			sei();
 			set_Bright(1, 0);
+			TXBRIDATA = 1;
 			_LED1(0);
+		}
+		
+		//отправка широковещ-й команды установки яркости на табло
+		//фильтр с проверкой двух младших битов
+		if (TXBRIDATA && (TXDATAEN & 0x01) && (TXDATAEN & 0x02)) {
+			//если глобально разрешена передача по RS485
+			TXBRIDATA = 0;
+			TxDATA(BROADCAST, BRIGHT, BriLevels[BriMode], BROADCAST, BRIGHT, BriLevels[BriMode]);
 		}
 
 		//чтение данных табло в ОЗУ из ЕЕ
@@ -902,13 +928,16 @@ int main(void)
 		{
 			j = rc5_data;
 			Rfunc = ((j & 0x3F)|(~j >> 7 & 0x40)); //Выделяем только код команды
-
+			//		USART_SendStr("---rc5_data OK");
+			//		USART_SendStr("------ TRY RCommand");
 			RCommand(Rfunc, isSettingsMode);
 			//если мы верно ввели количество табло в настройках то у нас isSettingsMode сохранится = 1 и мы сохраняемся в еепром + подтверждаем верный ввод еще одним морганием
 			if (isSettingsMode == 1 && isSettingsModeOver == 1) {
+				USART_SendStr(" if isSettingsMode == 1 && isSettingsModeOver == 1 OK ");
 				eeprom_write_byte(EETab + 2, qtTab);
 				isSettingsMode = 0;
 				isSettingsModeOver = 0;
+				USART_SendStr(" TRY DoBlinkingAllTabs() ");
 				DoBlinkingAllTabs(); //поморгали всеми табло в течении 3 секунд если верный ввод
 			}
 			rc5_data=0;
@@ -928,6 +957,8 @@ void SetCountTabs(uint8_t func)
 		case RC5DIG4:
 		case RC5DIG5: {
 			qtTab = func;
+			USART_SendStr(" ---SetCountTabs() OK    qtTab = ");
+			USART_PutChar(qtTab + 30);
 			break;
 		}
 		default: {
@@ -941,26 +972,30 @@ void SetCountTabs(uint8_t func)
 //ДОПИЛИТЬ
 void SetSettingsFromIrControl(uint8_t func)
 {
+	PrintStringWithValToSerial(" ---SetSettingsFromIrControl() OK    KEY CODE = ", func);
+
 	switch (func) {
 		//нажатие кнопки Power повторно
 		case RC5POWER: {
-			_flash_LED1(1, 30);
 			
 			if (Ntab == 1) {
+				PrintStringToSerial(" ---if (Ntab == 1) OK");
+				PrintStringToSerial(" ------TRY EepromWritePrice()");
 				EepromWritePrice(); //сохранили цену табло в еепром - только если редактировали первое табло
 			}
 			
 			Ntab++;
-					
+			
 			//проверка на превышение Ntab > qtTab
 			if (Ntab > qtTab) {
+				PrintStringToSerial("Ntab > qtTab OK");
 				Ntab = 1; //тогда переключаемся снова на первое табло
 			}
-		
-			TxDATA(BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT], BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT]); //устанавливаем среднюю яркость в режиме программирования на всех табло
+			PrintStringToSerial("DO BRIGHT all tabs OK");
+			set_Bright(BriValues[MIDDLE_BRIGHT], 4); //яркость всех табло
+			PrintStringToSerial("DO Blinking curr tab OK");
 			DoBlinking(Ntab); //начинаем моргать текущим табло
 			CountDigitButtonClick = 0;
-//			EepromWritePrice(); //сохранили цену табло в еепром - только если редактировали первое табло
 			break;
 		}
 		case RC5OK: {
@@ -976,10 +1011,17 @@ void SetSettingsFromIrControl(uint8_t func)
 				Ntab = qtTab; //тогда присваиваем индекс последнего табло чтобы переключиться на него
 			}
 			
-			TxDATA(BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT], BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT]); //устанавливаем среднюю яркость в режиме программирования на всех табло
+			set_Bright(BriValues[MIDDLE_BRIGHT], 4); //яркость всех табло
 			DoBlinking(Ntab); //начинаем моргать текущим табло
 			CountDigitButtonClick = 0;
-//			EepromWritePrice(); //сохранили цену табло в еепром
+			break;
+		}
+		case RC5EXIT: {
+			PrintStringToSerial("EXIT EXIT EXIT");
+			Ntab = 1;
+			isSettingsMode = 0;
+			ADCENABLE = 1;
+			READEEBRI = 1; //читаем яркость из ЕЕ
 			break;
 		}
 		case RC5DIG0: {
@@ -1023,6 +1065,7 @@ void SetSettingsFromIrControl(uint8_t func)
 			break;
 		}
 		default: {
+			PrintStringToSerial("PROGRAMMING MODE WRONG CODE");
 			break;
 		}
 	}
@@ -1045,7 +1088,7 @@ void DoButtonClickIrControl(uint8_t buttonCode)
 	//переход к редактированию следующей цифры: CountDigitButtonClick++
 	//далее CountDigitButtonClick меняется циклично от 1 до 4
 	//ввод значений в массив DigTmp[CountDigitButtonClick-1]=RC5DIG0;
-	if (CountDigitButtonClick == 1) {
+	if (CountDigitButtonClick > 0) {
 		CountDigitButtonClick++;
 		if (CountDigitButtonClick > 4) CountDigitButtonClick = 1;
 		DigTmp[CountDigitButtonClick - 1] = buttonCode;
@@ -1055,29 +1098,35 @@ void DoButtonClickIrControl(uint8_t buttonCode)
 		DigTmp[CountDigitButtonClick + 1] = DASHCODE;
 		DigTmp[CountDigitButtonClick + 2] = DASHCODE;
 		DigTmp[CountDigitButtonClick + 3] = DASHCODE;
-		CountDigitButtonClick++;
+		CountDigitButtonClick = 1;
 	}
 	//если редактируемое табло - текущее табло, то изменяем значения
-	if (TADR == (buttonCode + Ntab)) {
+	if (TADR == (TADR0 + Ntab)) {
 		Digit[0] = DigTmp[0];
 		Digit[1] = DigTmp[1];
 		Digit[2] = DigTmp[2];
 		Digit[3] = DigTmp[3];
+		display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], 0x0F);	//прямое отображение
 	}
 	//отправка новой цены на редактируемое табло
 	TxDATA(TADR + Ntab, RXTDATA, DigTmp[0], DigTmp[1], DigTmp[2], DigTmp[3]);
+	_delay_ms(300);	
 }
 
 //обработчик нажатия кнопки на ИК пульте
 void IrControlButtonClick(uint8_t func)
 {
+	PrintStringWithValToSerial("---IrControlButtonClick() OK   ButtonCode = ", func);
+	
 	switch (func) {
 		//нажатие кнопки Power
 		case RC5POWER:
 		case RC5OK: {
 			_flash_LED1(1, 30);
+			PrintStringWithValToSerial("Button POWER OR OK CLICK OK");
+			PrintStringWithValToSerial("TRY ProgrammingModeButtonClick()");
 			isSettingsMode = 2; //если нажали Power или OK то взводим флаг что мы в режиме редактирования текущего табло
-			ProgrammingModeButtonClick(1); //передали номер нижнего табло по нажатию ок 
+			ProgrammingModeButtonClick(1); //передали номер нижнего табло по нажатию ок
 			break;
 		}
 		//если нажата кнопка меню то переходим в режим настроек
@@ -1099,6 +1148,7 @@ void IrControlButtonClick(uint8_t func)
 			break;
 		}
 		default: {
+			PrintStringWithValToSerial("WRONG BUTTON CLICK!");
 			_flash_LED1(4, 30);
 			break;
 		}
@@ -1107,16 +1157,21 @@ void IrControlButtonClick(uint8_t func)
 
 //передача данных с ИК пульта
 void RCommand (uint8_t func, uint8_t _isSettingsMode) {
+	//USART_SendStr("---RCommand() OK");
+	_flash_LED1(1, 30); //Моргнцть один раз что команда принята с пульта
 	//если мы в режиме настроек то ждем ввод количества табло и выходим из этого режима
 	if (_isSettingsMode == 1) {
+		//USART_SendStr("if (_isSettingsMode == 1) OK");
 		SetCountTabs(func); //Задаем количество табло по нажатию кнопки с ИК пульта
 		isSettingsModeOver = 1; //поднимаем флаг что ввод окончен
 	}
 	else if (_isSettingsMode == 0) {
+		PrintStringToSerial(" isSettingsMode = 0 OK");
 		//обработчик нажатия кнопки на ИК пульте
 		IrControlButtonClick(func);
 	}
 	else if (_isSettingsMode == 2) {
+		PrintStringToSerial("  isSettingsMode = 2 OK");
 		//Задаем значения на выбранном табло в режиме настроек или же выбираем следующее табло при повторном нажатии на Power
 		SetSettingsFromIrControl(func);
 	}
@@ -1124,41 +1179,65 @@ void RCommand (uint8_t func, uint8_t _isSettingsMode) {
 
 void DoBlinking(uint8_t _nTab) {
 	for (uint8_t i = 0; i < 3; i++) {
-		if (_nTab == 1) set_Bright(BriValues[0], 0);
+		if (_nTab == 1) set_Bright(BriValues[0], 5); //яркость текущего табло
+		
 		TxDATA(TADR0 + _nTab, BRIGHT, BriValues[0], TADR0 + _nTab, BRIGHT, BriValues[0]);
 		_delay_ms(200);
-		if (_nTab == 1) set_Bright(BriValues[10], 0);
-		TxDATA(TADR0 + _nTab, BRIGHT, BriValues[10], TADR0 + _nTab, BRIGHT, BriValues[10]);
+		
+		if (_nTab == 1) set_Bright(BriValues[11], 5); //яркость текущего табло
+		
+		TxDATA(TADR0 + _nTab, BRIGHT, BriValues[11], TADR0 + _nTab, BRIGHT, BriValues[11]);
 		_delay_ms(200);
 	}
 }
 
 void DoBlinkingAllTabs() {
 	for (uint8_t i = 0; i < 3; i++) {
-		set_Bright(BriValues[0],0);
-		TxDATA(BROADCAST, BRIGHT, BriValues[0], BROADCAST, BRIGHT, BriValues[0]);
+		set_Bright(BriValues[0], 4); //яркость всех табло
 		_delay_ms(200);
-		set_Bright(BriValues[10],0);
-		TxDATA(BROADCAST, BRIGHT, BriValues[10], BROADCAST, BRIGHT, BriValues[10]);
+		set_Bright(BriValues[11], 4); //яркость всех табло
 		_delay_ms(200);
 	}
 }
 
 //Функция обработки нажатия кнопки режима программирования
 void ProgrammingModeButtonClick(uint8_t _nTab) {
-	Ntab = _nTab; //номер текущего табло
-	TxDATA(BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT], BROADCAST, BRIGHT, BriValues[MIDDLE_BRIGHT]); //устанавливаем среднюю яркость в режиме программирования на всех табло
-	DoBlinking(Ntab); //начинаем моргать текущим табло (самым первым по индексу Ntab, выше = 1)
-	doTimer = cntT1 + ONEMIN;		//плюс одна минута на редактирование
-	while (cntT1 < doTimer) {
-		if (rc5_data)
-		{
-			j = rc5_data;
-			Rfunc = ((j & 0x3F) | (~j >> 7 & 0x40)); //Выделяем только код команды
-			RCommand(Rfunc, isSettingsMode);//парсим команду с ИК
-			rc5_data = 0;
-			doTimer = cntT1 + ONEMIN;		//плюс одна минута на редактирование
-		}
-		_delay_ms(10);	//иначе while не сработает 
-	}
+	//PrintStringToSerial("---ProgrammingModeButtonClick() OK");
+	//PrintStringToSerial("------Set BRIGHT ALL TABS OK");
+	set_Bright(BriValues[MIDDLE_BRIGHT], 4);  //яркость всех табло
+	DoBlinking(_nTab); //начинаем моргать текущим табло (самым первым по индексу Ntab, выше = 1)
+	//PrintStringWithValToSerial("------Set DoBlinking(Ntab) OK   Ntab = ", Ntab);
+	PrintStringToSerial("------Set DoBlinking(Ntab) OK   Ntab = ");
+	
+	// 	doTimer = cntT1 + ONEMIN;		//плюс одна минута на редактирование
+	//
+	// 	while (cntT1 < doTimer) {
+	// 		if (rc5_data)
+	// 		{
+	// 			doTimer = cntT1 + ONEMIN;		//плюс одна минута на редактирование
+	// 			j = rc5_data;
+	// 			Rfunc = ((j & 0x3F) | (~j >> 7 & 0x40)); //Выделяем только код команды
+	// 			PrintStringToSerial(" INTO WHILE  if (rc5_data) OK OK OK");
+	// 			RCommand(Rfunc, isSettingsMode);//парсим команду с ИК
+	// 			rc5_data = 0;
+	// 		}
+	// 		_delay_ms(10);	//иначе while не сработает
+	// 	}
+	// 	isSettingsMode = 0;
+	// 	PrintStringToSerial("................OUT FROM WHILE.................");
+}
+
+void PrintStringWithValToSerial(char* string, uint8_t val)
+{
+	_RS485(2);
+	USART_SendStr(string);
+	USART_PutChar(val + 0x30);
+	USART_SendStr("\r\n");
+}
+
+void PrintStringToSerial(char* string)
+{
+	_RS485(2);
+	USART_SendStr(string);
+	USART_SendStr("\r\n");
 }
