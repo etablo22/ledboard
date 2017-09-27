@@ -682,7 +682,7 @@ void _SOFTRESET(void)
 }
 
 //установка начальных значений переменных
-void _UPDATEDATA(void)
+void Initialize(void)
 {
 	cli();
 	Ntab = eeprom_read_byte(EETab);		//значение номера табло
@@ -741,7 +741,7 @@ void _UPDATEDATA(void)
 /* = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = */
 int main(void)
 {
-	_UPDATEDATA();
+	Initialize();
 
 	// 	initT1(0x00);	//остановка таймера для исключения ложного срабатывания
 	// 	cntT1=0;
@@ -834,7 +834,7 @@ int main(void)
 				while(1);
 			}
 			else {
-				_UPDATEDATA();
+				Initialize();
 				_SOFTRESET();
 			}
 		}
@@ -882,17 +882,6 @@ int main(void)
 			TxDATA(BROADCAST, BRIGHT, BriLevels[BriMode], BROADCAST, BRIGHT, BriLevels[BriMode]);
 		}
 
-		//чтение данных табло в ОЗУ из ЕЕ
-		if (READEEDIG) {
-			_LED1(1);
-			READEEDIG = 0;
-			cli();
-			for (j = 0; j < 4; j++)
-			Digit[j] = eeprom_read_byte(EEDigit + j);
-			sei();
-			_LED1(0);
-		}
-
 		//запись данных табло в ЕЕ
 		if (WRITEEEDIG && (WREEN & 0x01)) {
 			_LED1(1);
@@ -900,6 +889,17 @@ int main(void)
 			cli();
 			for (j = 0; j < 4; j++)
 			eeprom_write_byte(EEDigit + j, Digit[j]);
+			sei();
+			_LED1(0);
+		}
+		
+		//чтение данных табло в ОЗУ из ЕЕ
+		if (READEEDIG) {
+			_LED1(1);
+			READEEDIG = 0;
+			cli();
+			for (j = 0; j < 4; j++)
+			Digit[j] = eeprom_read_byte(EEDigit + j);
 			sei();
 			_LED1(0);
 		}
@@ -933,11 +933,11 @@ int main(void)
 			RCommand(Rfunc, isSettingsMode);
 			//если мы верно ввели количество табло в настройках то у нас isSettingsMode сохранится = 1 и мы сохраняемся в еепром + подтверждаем верный ввод еще одним морганием
 			if (isSettingsMode == 1 && isSettingsModeOver == 1) {
-				USART_SendStr(" if isSettingsMode == 1 && isSettingsModeOver == 1 OK ");
+				PrintStringToSerial(" if isSettingsMode == 1 && isSettingsModeOver == 1 OK ");
 				eeprom_write_byte(EETab + 2, qtTab);
 				isSettingsMode = 0;
 				isSettingsModeOver = 0;
-				USART_SendStr(" TRY DoBlinkingAllTabs() ");
+				PrintStringToSerial(" TRY DoBlinkingAllTabs() ");
 				DoBlinkingAllTabs(); //поморгали всеми табло в течении 3 секунд если верный ввод
 			}
 			rc5_data=0;
@@ -957,8 +957,8 @@ void SetCountTabs(uint8_t func)
 		case RC5DIG4:
 		case RC5DIG5: {
 			qtTab = func;
-			USART_SendStr(" ---SetCountTabs() OK    qtTab = ");
-			USART_PutChar(qtTab + 30);
+			PrintStringWithValToSerial(" ---SetCountTabs() OK    qtTab = ", qtTab);
+			isSettingsModeOver = 1; //поднимаем флаг что ввод окончен
 			break;
 		}
 		default: {
@@ -968,8 +968,7 @@ void SetCountTabs(uint8_t func)
 	}
 }
 
-//Задаем значения на выбранном табло в режиме редактирования или же выбираем следующее табло при повторном нажатии на Power
-//ДОПИЛИТЬ
+//Задаем значения на выбранном табло в режиме редактирования или же выбираем следующее табло при повторном нажатии на Power или Ok
 void SetSettingsFromIrControl(uint8_t func)
 {
 	PrintStringWithValToSerial(" ---SetSettingsFromIrControl() OK    KEY CODE = ", func);
@@ -977,91 +976,28 @@ void SetSettingsFromIrControl(uint8_t func)
 	switch (func) {
 		//нажатие кнопки Power повторно
 		case RC5POWER: {
-			
-			if (Ntab == 1) {
-				PrintStringToSerial(" ---if (Ntab == 1) OK");
-				PrintStringToSerial(" ------TRY EepromWritePrice()");
-				EepromWritePrice(); //сохранили цену табло в еепром - только если редактировали первое табло
-			}
-			
-			Ntab++;
-			
-			//проверка на превышение Ntab > qtTab
-			if (Ntab > qtTab) {
-				PrintStringToSerial("Ntab > qtTab OK");
-				Ntab = 1; //тогда переключаемся снова на первое табло
-			}
-			PrintStringToSerial("DO BRIGHT all tabs OK");
-			set_Bright(BriValues[MIDDLE_BRIGHT], 4); //яркость всех табло
-			PrintStringToSerial("DO Blinking curr tab OK");
-			DoBlinking(Ntab); //начинаем моргать текущим табло
-			CountDigitButtonClick = 0;
+			PowerButtonClickProgMode();
 			break;
 		}
 		case RC5OK: {
-			_flash_LED1(1, 30);
-			if (Ntab == 1) {
-				EepromWritePrice(); //сохранили цену табло в еепром - только если редактировали первое табло
-			}
-			
-			Ntab--;
-			
-			//проверка на Ntab < 1
-			if (Ntab < 1) {
-				Ntab = qtTab; //тогда присваиваем индекс последнего табло чтобы переключиться на него
-			}
-			
-			set_Bright(BriValues[MIDDLE_BRIGHT], 4); //яркость всех табло
-			DoBlinking(Ntab); //начинаем моргать текущим табло
-			CountDigitButtonClick = 0;
+			OkButtonClickProgMode();
 			break;
 		}
 		case RC5EXIT: {
-			PrintStringToSerial("EXIT EXIT EXIT");
-			Ntab = 1;
-			isSettingsMode = 0;
-			ADCENABLE = 1;
-			READEEBRI = 1; //читаем яркость из ЕЕ
+			ExitButtonClickProgMode();
 			break;
 		}
-		case RC5DIG0: {
-			DoButtonClickIrControl(RC5DIG0);
-			break;
-		}
-		case RC5DIG1: {
-			DoButtonClickIrControl(RC5DIG1);
-			break;
-		}
-		case RC5DIG2: {
-			DoButtonClickIrControl(RC5DIG2);
-			break;
-		}
-		case RC5DIG3: {
-			DoButtonClickIrControl(RC5DIG3);
-			break;
-		}
-		case RC5DIG4: {
-			DoButtonClickIrControl(RC5DIG4);
-			break;
-		}
-		case RC5DIG5: {
-			DoButtonClickIrControl(RC5DIG5);
-			break;
-		}
-		case RC5DIG6: {
-			DoButtonClickIrControl(RC5DIG6);
-			break;
-		}
-		case RC5DIG7: {
-			DoButtonClickIrControl(RC5DIG7);
-			break;
-		}
-		case RC5DIG8: {
-			DoButtonClickIrControl(RC5DIG8);
-			break;
-		}
+		case RC5DIG0:
+		case RC5DIG1:
+		case RC5DIG2:
+		case RC5DIG3:
+		case RC5DIG4:
+		case RC5DIG5:
+		case RC5DIG6:
+		case RC5DIG7:
+		case RC5DIG8:
 		case RC5DIG9: {
-			DoButtonClickIrControl(RC5DIG9);
+			DigitButtonClickProgMode(func);
 			break;
 		}
 		default: {
@@ -1071,17 +1007,57 @@ void SetSettingsFromIrControl(uint8_t func)
 	}
 }
 
-void EepromWritePrice()
+void PowerButtonClickProgMode()
 {
-	_flash_LED1(1, 30);
-	cli();
-	for (j = 0; j < 4; j++)
-	eeprom_write_byte(EEDigit + j, Digit[j]);
-	sei();
-	//добавить команду TX на сохранение в ЕЕ на редактируемом табло
+	if (Ntab == 1) {
+		PrintStringToSerial(" ---if (Ntab == 1) OK");
+		PrintStringToSerial(" ------TRY EepromWritePrice()");
+		EepromWritePrice(); //сохранили цену табло в еепром - только если редактировали первое табло
+	}
+	
+	Ntab++;
+	
+	//проверка на превышение Ntab > qtTab
+	if (Ntab > qtTab) {
+		PrintStringToSerial("Ntab > qtTab OK");
+		Ntab = 1; //тогда переключаемся снова на первое табло
+	}
+	PrintStringToSerial("DO BRIGHT all tabs OK");
+	set_Bright(BriValues[MIDDLE_BRIGHT], 4); //яркость всех табло
+	PrintStringToSerial("DO Blinking curr tab OK");
+	DoBlinking(Ntab); //начинаем моргать текущим табло
+	CountDigitButtonClick = 0;
 }
 
-void DoButtonClickIrControl(uint8_t buttonCode)
+void OkButtonClickProgMode()
+{
+	_flash_LED1(1, 30);
+	if (Ntab == 1) {
+		EepromWritePrice(); //сохранили цену табло в еепром - только если редактировали первое табло
+	}
+	
+	Ntab--;
+	
+	//проверка на Ntab < 1
+	if (Ntab < 1) {
+		Ntab = qtTab; //тогда присваиваем индекс последнего табло чтобы переключиться на него
+	}
+	
+	set_Bright(BriValues[MIDDLE_BRIGHT], 4); //яркость всех табло
+	DoBlinking(Ntab); //начинаем моргать текущим табло
+	CountDigitButtonClick = 0;
+}
+
+void ExitButtonClickProgMode()
+{
+	PrintStringToSerial("EXIT EXIT EXIT");
+	Ntab = 1;
+	isSettingsMode = 0;
+	ADCENABLE = 1;
+	READEEBRI = 1; //читаем яркость из ЕЕ
+}
+
+void DigitButtonClickProgMode(uint8_t buttonCode)
 {
 	//при первом нажатии CountDigitButtonClick == 0
 	//выполняется сброс данных на редактируемом табло и установка первой цифры
@@ -1110,7 +1086,7 @@ void DoButtonClickIrControl(uint8_t buttonCode)
 	}
 	//отправка новой цены на редактируемое табло
 	TxDATA(TADR + Ntab, RXTDATA, DigTmp[0], DigTmp[1], DigTmp[2], DigTmp[3]);
-	_delay_ms(300);	
+	_delay_ms(300);
 }
 
 //обработчик нажатия кнопки на ИК пульте
@@ -1123,8 +1099,8 @@ void IrControlButtonClick(uint8_t func)
 		case RC5POWER:
 		case RC5OK: {
 			_flash_LED1(1, 30);
-			PrintStringWithValToSerial("Button POWER OR OK CLICK OK");
-			PrintStringWithValToSerial("TRY ProgrammingModeButtonClick()");
+			PrintStringToSerial("Button POWER OR OK CLICK OK");
+			PrintStringToSerial("TRY ProgrammingModeButtonClick()");
 			isSettingsMode = 2; //если нажали Power или OK то взводим флаг что мы в режиме редактирования текущего табло
 			ProgrammingModeButtonClick(1); //передали номер нижнего табло по нажатию ок
 			break;
@@ -1157,13 +1133,11 @@ void IrControlButtonClick(uint8_t func)
 
 //передача данных с ИК пульта
 void RCommand (uint8_t func, uint8_t _isSettingsMode) {
-	//USART_SendStr("---RCommand() OK");
 	_flash_LED1(1, 30); //Моргнцть один раз что команда принята с пульта
 	//если мы в режиме настроек то ждем ввод количества табло и выходим из этого режима
 	if (_isSettingsMode == 1) {
-		//USART_SendStr("if (_isSettingsMode == 1) OK");
+		PrintStringToSerial("if (_isSettingsMode == 1) OK");
 		SetCountTabs(func); //Задаем количество табло по нажатию кнопки с ИК пульта
-		isSettingsModeOver = 1; //поднимаем флаг что ввод окончен
 	}
 	else if (_isSettingsMode == 0) {
 		PrintStringToSerial(" isSettingsMode = 0 OK");
@@ -1202,11 +1176,8 @@ void DoBlinkingAllTabs() {
 
 //Функция обработки нажатия кнопки режима программирования
 void ProgrammingModeButtonClick(uint8_t _nTab) {
-	//PrintStringToSerial("---ProgrammingModeButtonClick() OK");
-	//PrintStringToSerial("------Set BRIGHT ALL TABS OK");
 	set_Bright(BriValues[MIDDLE_BRIGHT], 4);  //яркость всех табло
 	DoBlinking(_nTab); //начинаем моргать текущим табло (самым первым по индексу Ntab, выше = 1)
-	//PrintStringWithValToSerial("------Set DoBlinking(Ntab) OK   Ntab = ", Ntab);
 	PrintStringToSerial("------Set DoBlinking(Ntab) OK   Ntab = ");
 	
 	// 	doTimer = cntT1 + ONEMIN;		//плюс одна минута на редактирование
@@ -1240,4 +1211,14 @@ void PrintStringToSerial(char* string)
 	_RS485(2);
 	USART_SendStr(string);
 	USART_SendStr("\r\n");
+}
+
+void EepromWritePrice()
+{
+	_flash_LED1(1, 30);
+	cli();
+	for (j = 0; j < 4; j++)
+	eeprom_write_byte(EEDigit + j, Digit[j]);
+	sei();
+	//добавить команду TX на сохранение в ЕЕ на редактируемом табло
 }
