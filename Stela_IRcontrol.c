@@ -45,6 +45,7 @@ CountDigitButtonClick - счетчик нажатия цифровых кноп�
 #define RXNtab		0xA9	//команда установить количество табло
 #define RXTDATAall	0xAA	//команда приема данных для всех табло 32Б (170)
 #define RXTDATA		0xAB	//команда приема данных по адресу (171)
+#define RXWRITEEE   0xAC    //команда на запись в ее установленной цены
 #define SETINDIC	0x96	//установить (показать) режим индикации
 #define SETDSORT	0x97	//установить (показать) порядок сортировки разрядов табло
 #define SETMODE		0x98	//установить (показать) режим работы
@@ -69,16 +70,15 @@ CountDigitButtonClick - счетчик нажатия цифровых кноп�
 #define MAXNTAB		12		//максимальный номер табло, устанавливаемый кнопкой
 
 // пороги уровней освещенности
-#define ADCLUXCH	7
-#define LUM1		2048
-#define LUM2		16384
-#define MIDDLE_BRIGHT 3
-// #define BRIGHT1		0x05
-// #define BRIGHT2		0x50
-// #define BRIGHT3		0xC0
+uint8_t const ADCLUXCH = 7; //сидит на 7 порту
+uint8_t const LUM1 = 200; //уровни освещенности
+uint8_t const LUM2 = 600;
+#define MIDDLE_BRIGHT 3 //индекс для массива значений яркости табло (среднее)
 
 //общие константы
-#define TabloUpdatePeriod		2	//1 ед. = 4,4мс при TCCRB = 0x01 в _UPDATEDATA() : initT1(0x01)
+#define TabloUpdatePeriod		1000 //1 ед. = 4,4мс при TCCRB = 0x01 в Initialize : initT1(0x01)
+//1 ед. = 35мс при TCCRB = 0x02 в Initialize : initT1(0x02)
+//1 ед. = 1мс при TCCRB = 0x0A; OCR1A = 1843; в Initialize : initT1(0x0A)
 
 // пороги перехода времени суток
 #define MORNING_HOUR	7
@@ -116,9 +116,10 @@ CountDigitButtonClick - счетчик нажатия цифровых кноп�
 
 
 uint8_t const DASHCODE = 10;
+uint8_t const ADCLUXCOUNTER = 100; //количество измерений
 uint16_t j = 0, it1 = 0;
-unsigned long long cntT1 = 0;
-unsigned long long doTimer = 0;
+unsigned long cntT1 = 0, TabloUpdateTime, ADCSTART;
+unsigned long doTimer = 0;
 uint32_t const ONEMIN = 5;
 uint8_t dispcounter, OCRtest, cntT0;
 uint8_t cnt_btn0, cnt_btn1;
@@ -133,11 +134,11 @@ uint8_t isSettingsModeOver = 0; //флаг выхода из режима нас
 uint8_t CountDigitButtonClick = 0; //флаг первичного нажатия на клавишу цифры на ИК пульте (для обнуления текущего выбранного табло)
 
 uint8_t Digit[4]={5, 6, 7, 8}, PointMask=0x0F, DigTmp[4], nDig;
-uint8_t EEMEM EEDigit[4] = {1, 2, 3, 4},
+uint8_t EEMEM EEDigit[4] = {0, 0, 0, 0},
 EEDsort[5] = {0, 1, 2, 3, 0x0F},
 EEdata[5] = {1, 255, 0, 0, 101};
 
-uint8_t EEMEM EEBriData[3] = {20, 95, 214}; //уровень яркости {ночной,средний, дневной}
+uint8_t EEMEM EEBriData[3] = {5, 95, 250}; //уровень яркости {ночной,средний, дневной}
 
 uint8_t BriMode,
 preBriMode,
@@ -152,7 +153,7 @@ BriStep;
 uint8_t getADR, UARTcommand, UARTdata;
 //флаги работы программы
 int8_t TXBRIDATA, TXTAB, TXDATAEN, SOFTRESET, CHBRI, SWMODE;
-uint8_t ADCENABLE, ADCSTART, TabloUpdateTime, EDITBRI, EDITDIG;
+uint8_t ADCENABLE, EDITBRI, EDITDIG;
 int8_t WREEN, WRITEEEDIG, WRITEEEBRI, WRITEEENTAB, READEEBRI, READEEDIG, READEEDSORT;
 int8_t PRESSBTN0, PRESSBTN1, REPRESSBTN0, REPRESSBTN1;
 int8_t RCONTROL, Rfunc, mode=0, premode;
@@ -380,7 +381,8 @@ void initT1(uint8_t TCRB)
 {
 	TCCR1A = 0;
 	TCCR1B = TCRB;
-	TIMSK |= (1 << TOIE1);
+	TIMSK |= (1 << OCIE1A);
+	OCR1A = 1843;
 	cntT1 = 0;
 }
 
@@ -390,7 +392,7 @@ void initT1(uint8_t TCRB)
 //		:обновление данных в режиме тестирования табло
 //		:запуск измерений АЦП
 //		:опрос нажатия кнопок
-ISR (TIMER1_OVF_vect)
+ISR (TIMER1_COMPA_vect)
 {
 	cntT1++;
 	//проверка нажатия кнопки PC0
@@ -638,12 +640,13 @@ uint8_t USART_handle(void)
 void ADCluxmeter(uint8_t luxchannel)
 {
 	//суммирование результата измерения освещенности по номеру канала с датчиком
-	v_ADC += ADC_result(luxchannel) >> 2;	//10-битный АЦП, оставляем 8 значащих разрядов
+	v_ADC += ADC_result(luxchannel) / ADCLUXCOUNTER;	//10-битный АЦП, вычисляем среднее значение
 	adc_counter++; //набираем количество измерений для определения среднего значения
 	
 	//изменение яркости в соответствии с измеренной освещенностью
-	if (adc_counter > 112)		//с периодичностью 10 сек
+	if (adc_counter > ADCLUXCOUNTER)		//с периодичностью 10 сек
 	{
+		PrintStringToSerial("if (adc_counter > ADCLUXCOUNTER) OK OK OK");
 		set_Bright(v_ADC, 2);		//установить режим яркости по освещенности
 		if (BriMode != preBriMode)	//если режим яркости изменился
 		{
@@ -689,7 +692,7 @@ void Initialize(void)
 	TADR = eeprom_read_byte(EETab + 1);		//значение адреса табло
 	qtTab = eeprom_read_byte(EETab + 2);		//значение количества табло
 
-	DDRLED |= _BV(LED1);//|_BV(LED2);
+	DDRLED |= (1 << LED1);//|_BV(LED2);
 	
 	digit_sort(0, 1, 2, 3); //сортировка разрядов табло
 	set_PWC(2); //установка режима поразрядной индикации
@@ -700,7 +703,7 @@ void Initialize(void)
 	TabloUpdateTime = TabloUpdatePeriod;
 	cntT1 = 0;
 	CHBRI = 0;
-	ADCENABLE = 0;			//разрешить преобразования АЦП
+	ADCENABLE = 1;			//разрешить преобразования АЦП
 	TXDATAEN = 3;
 	WREEN = 1;					//разрешить запись в ЕЕ
 	WRITEEENTAB = 0;
@@ -709,6 +712,8 @@ void Initialize(void)
 	READEEDIG = 1;
 	READEEBRI = 1;
 	SOFTRESET = 0;
+	ADCSTART = 0;
+	adc_counter = 0;
 	
 	BriMode = 2;
 	BriStep = _getBriStep(BriLevels[BriMode]);
@@ -718,7 +723,7 @@ void Initialize(void)
 	initBTN();			//обработка в T1_OVF
 	init595();
 	initPWM();
-	initT1(0x04);		//16-битный, clk/1, период OVF 4,4мс
+	initT1(0x0A);		//16-битный, clk/1, период OVF 4,4мс
 	adc_init();
 	USART_Init(USART_DOUBLED, 19200);
 	USART_FlushTxBuf();
@@ -840,22 +845,35 @@ int main(void)
 		}
 		
 		//обновление данных на табло по достижению счетчика cntT1 + TabloUpdatePeriod
-		if (cntT1 == TabloUpdateTime) {
+		if (cntT1 > TabloUpdateTime) {
 			_LED1(1);
 			TabloUpdateTime = cntT1 + TabloUpdatePeriod;
-			if (Digit[3] == 9) {
+			if (Digit[3] == 10) {
 				Digit[3] = 0;
+				Digit[2]++;
+				
+			}
+			if (Digit[2] == 6) {
+				Digit[2] = 0;
+				Digit[1]++;
+			}
+			if (Digit[1] == 10) {
+				Digit[1] = 0;
+				Digit[0]++;
+			}
+			if (Digit[0] == 6) {
+				Digit[0] = 0;
 			}
 			
 			display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3]++, 0x0F);	//прямое отображение
-			_delay_ms(1);
 			_LED1(0);
 		}
 		
 		//запуск измерений АЦП
-		if ((cntT1 == ADCSTART) && ADCENABLE)
+		if ((cntT1 > ADCSTART) && ADCENABLE)
 		{
-			ADCSTART=cntT1 + 20;	//примерно с периодом 0,08(8)сек
+			//PrintStringToSerial("INTO ADC FINE!");
+			ADCSTART=cntT1 + 100;	//примерно с периодом 0.1 сек
 			ADCluxmeter(ADCLUXCH);
 		}
 
@@ -882,14 +900,11 @@ int main(void)
 			TxDATA(BROADCAST, BRIGHT, BriLevels[BriMode], BROADCAST, BRIGHT, BriLevels[BriMode]);
 		}
 
-		//запись данных табло в ЕЕ
+		//запись данных на всех табло в ЕЕ
 		if (WRITEEEDIG && (WREEN & 0x01)) {
 			_LED1(1);
 			WRITEEEDIG = 0;
-			cli();
-			for (j = 0; j < 4; j++)
-			eeprom_write_byte(EEDigit + j, Digit[j]);
-			sei();
+			EepromWritePrice(BROADCAST - TADR0); //широковещательная отправка на все табло для сохранения в ее
 			_LED1(0);
 		}
 		
@@ -937,7 +952,7 @@ int main(void)
 				eeprom_write_byte(EETab + 2, qtTab);
 				isSettingsMode = 0;
 				isSettingsModeOver = 0;
-				PrintStringToSerial(" TRY DoBlinkingAllTabs() ");
+				//PrintStringToSerial(" TRY DoBlinkingAllTabs() ");
 				DoBlinkingAllTabs(); //поморгали всеми табло в течении 3 секунд если верный ввод
 			}
 			rc5_data=0;
@@ -1009,22 +1024,21 @@ void SetSettingsFromIrControl(uint8_t func)
 
 void PowerButtonClickProgMode()
 {
-	if (Ntab == 1) {
-		PrintStringToSerial(" ---if (Ntab == 1) OK");
-		PrintStringToSerial(" ------TRY EepromWritePrice()");
-		EepromWritePrice(); //сохранили цену табло в еепром - только если редактировали первое табло
+	if (CountDigitButtonClick > 0) {
+		//PrintStringToSerial(" ------TRY EepromWritePrice()");
+		EepromWritePrice(Ntab); //сохранили цену табло в еепром если редактировали
 	}
 	
 	Ntab++;
 	
 	//проверка на превышение Ntab > qtTab
 	if (Ntab > qtTab) {
-		PrintStringToSerial("Ntab > qtTab OK");
+		//PrintStringToSerial("Ntab > qtTab OK");
 		Ntab = 1; //тогда переключаемся снова на первое табло
 	}
 	PrintStringToSerial("DO BRIGHT all tabs OK");
 	set_Bright(BriValues[MIDDLE_BRIGHT], 4); //яркость всех табло
-	PrintStringToSerial("DO Blinking curr tab OK");
+	//PrintStringToSerial("DO Blinking curr tab OK");
 	DoBlinking(Ntab); //начинаем моргать текущим табло
 	CountDigitButtonClick = 0;
 }
@@ -1032,8 +1046,9 @@ void PowerButtonClickProgMode()
 void OkButtonClickProgMode()
 {
 	_flash_LED1(1, 30);
-	if (Ntab == 1) {
-		EepromWritePrice(); //сохранили цену табло в еепром - только если редактировали первое табло
+	if (CountDigitButtonClick > 0) {
+		//PrintStringToSerial(" ------TRY EepromWritePrice()");
+		EepromWritePrice(Ntab); //сохранили цену табло в еепром  если редактировали
 	}
 	
 	Ntab--;
@@ -1055,6 +1070,11 @@ void ExitButtonClickProgMode()
 	isSettingsMode = 0;
 	ADCENABLE = 1;
 	READEEBRI = 1; //читаем яркость из ЕЕ
+	
+	if (CountDigitButtonClick > 0) {
+		//PrintStringToSerial(" ------TRY EepromWritePrice()");
+		EepromWritePrice(Ntab); //сохранили цену табло в еепром  если редактировали
+	}
 }
 
 void DigitButtonClickProgMode(uint8_t buttonCode)
@@ -1092,7 +1112,7 @@ void DigitButtonClickProgMode(uint8_t buttonCode)
 //обработчик нажатия кнопки на ИК пульте
 void IrControlButtonClick(uint8_t func)
 {
-	PrintStringWithValToSerial("---IrControlButtonClick() OK   ButtonCode = ", func);
+	//PrintStringWithValToSerial("---IrControlButtonClick() OK   ButtonCode = ", func);
 	
 	switch (func) {
 		//нажатие кнопки Power
@@ -1100,7 +1120,7 @@ void IrControlButtonClick(uint8_t func)
 		case RC5OK: {
 			_flash_LED1(1, 30);
 			PrintStringToSerial("Button POWER OR OK CLICK OK");
-			PrintStringToSerial("TRY ProgrammingModeButtonClick()");
+			//PrintStringToSerial("TRY ProgrammingModeButtonClick()");
 			isSettingsMode = 2; //если нажали Power или OK то взводим флаг что мы в режиме редактирования текущего табло
 			ProgrammingModeButtonClick(1); //передали номер нижнего табло по нажатию ок
 			break;
@@ -1136,16 +1156,16 @@ void RCommand (uint8_t func, uint8_t _isSettingsMode) {
 	_flash_LED1(1, 30); //Моргнцть один раз что команда принята с пульта
 	//если мы в режиме настроек то ждем ввод количества табло и выходим из этого режима
 	if (_isSettingsMode == 1) {
-		PrintStringToSerial("if (_isSettingsMode == 1) OK");
+		//PrintStringToSerial("if (_isSettingsMode == 1) OK");
 		SetCountTabs(func); //Задаем количество табло по нажатию кнопки с ИК пульта
 	}
 	else if (_isSettingsMode == 0) {
-		PrintStringToSerial(" isSettingsMode = 0 OK");
+		//PrintStringToSerial(" isSettingsMode = 0 OK");
 		//обработчик нажатия кнопки на ИК пульте
 		IrControlButtonClick(func);
 	}
 	else if (_isSettingsMode == 2) {
-		PrintStringToSerial("  isSettingsMode = 2 OK");
+		//PrintStringToSerial("  isSettingsMode = 2 OK");
 		//Задаем значения на выбранном табло в режиме настроек или же выбираем следующее табло при повторном нажатии на Power
 		SetSettingsFromIrControl(func);
 	}
@@ -1213,12 +1233,15 @@ void PrintStringToSerial(char* string)
 	USART_SendStr("\r\n");
 }
 
-void EepromWritePrice()
+void EepromWritePrice(uint8_t _nTab)
 {
 	_flash_LED1(1, 30);
-	cli();
-	for (j = 0; j < 4; j++)
-	eeprom_write_byte(EEDigit + j, Digit[j]);
-	sei();
-	//добавить команду TX на сохранение в ЕЕ на редактируемом табло
+	if (_nTab == 1) {
+		cli();
+		for (j = 0; j < 4; j++)
+		eeprom_write_byte(EEDigit + j, Digit[j]);
+		sei();
+	}
+	//команда RX на сохранение в ЕЕ на редактируемом табло
+	TxDATA(TADR0 + _nTab, RXWRITEEE, 0x01, TADR0 + _nTab, RXWRITEEE, 0x01);
 }
