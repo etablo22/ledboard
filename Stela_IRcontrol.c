@@ -596,25 +596,6 @@ void COMMANDS(uint8_t func) {
 
 uint8_t USART_handle(void)
 {
-	// 	uint8_t CORRECT = 1;
-	// 	getADR = USART_GetChar();	//чтение байта 1: адрес
-	//
-	// 	//если не широковещательный и сравнение с адресом контроллера
-	// 	if (getADR != BROADCAST && getADR == TADR) {
-	// 		//выполнение при совпадении адреса
-	// 		_delay_ms(200);		//дополнительная задержка для загрузки байта
-	// 		if (USART_GetRxCount()) {
-	// 			UARTcommand = USART_GetChar();	//чтение адресной команды
-	// 		}
-	// 		else CORRECT = 0;
-	// 	}
-	// 	else if (USART_GetRxCount()) {	//если широковещательный адрес
-	// 		_delay_ms(200);			//дополнительная задержка для загрузки байта
-	// 		UARTcommand = USART_GetChar();	//чтение широковещательной команды
-	// 	}
-	// 	else CORRECT = 0;
-	// 	return CORRECT;
-
 	uint8_t CORRECT=1;
 	getADR = USART_GetChar();	//чтение байта 1: адрес
 	if (getADR!=BROADCAST) {	//если не широковещательный
@@ -651,7 +632,7 @@ void ADCluxmeter(uint8_t luxchannel)
 	{
 		PrintStringWithValToSerial("LOW v_ADC = ", (uint8_t) v_ADC);
 		PrintStringWithValToSerial("HIGH v_ADC = ", (uint8_t) (v_ADC>>8));
-		display_dnum(v_ADC);
+		//display_dnum(v_ADC);
 		TabloUpdateTime = cntT1 + 5000;
 		set_Bright(v_ADC, 2);		//установить режим яркости по освещенности
 		if (BriMode != preBriMode)	//если режим яркости изменился
