@@ -148,6 +148,9 @@ BriLevels[3] = {20, 95, 214},
 BriValues[12] = {5, 30, 40, 50, 62, 77, 95, 118, 146, 181, 214, 250},
 BriStep;
 
+//----------------------------------0-----1-----2-----3-----4-----5-----6-----7-----8------9--minus--null---^C--
+uint8_t ABCD_T [MAXDIGNUMBER]= {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x40, 0x00, 0x63};
+
 
 //EEdata - 4Б: данные для настройки табло
 //{номер табло, яркость, режим индикации, режим работы,адрес табло} (номер и адрес табло - константы для надежности)
@@ -643,7 +646,7 @@ void ADCluxmeter(uint8_t luxchannel)
 		//				else TXDATAEN &=~(0x01);	//запрещение TX при сохранении режима яркости
 		adc_counter = 0;
 		v_ADC = 0;
-		_flash_LED1(3, 20);
+		_flash_LED1(3, 500);
 	}
 }
 
@@ -832,7 +835,7 @@ int main(void)
 		}
 		
 		//обновление данных на табло по достижению счетчика cntT1 + TabloUpdatePeriod
-		if (cntT1 > TabloUpdateTime) {
+		if (cntT1 > TabloUpdateTime && isSettingsMode == 0) {
 			_LED1(1);
 			TabloUpdateTime = cntT1 + TabloUpdatePeriod;
 			if (Digit[3] == 10) {
@@ -957,7 +960,11 @@ void SetCountTabs(uint8_t func)
 		case RC5DIG2:
 		case RC5DIG3:
 		case RC5DIG4:
-		case RC5DIG5: {
+		case RC5DIG5:
+		case RC5DIG6:
+		case RC5DIG7:
+		case RC5DIG8:
+		case RC5DIG9: {
 			qtTab = func;
 			PrintStringWithValToSerial(" ---SetCountTabs() OK    qtTab = ", qtTab);
 			isSettingsModeOver = 1; //поднимаем флаг что ввод окончен
@@ -968,6 +975,7 @@ void SetCountTabs(uint8_t func)
 			break;
 		}
 	}
+	_delay_ms(300);
 }
 
 //Задаем значения на выбранном табло в режиме редактирования или же выбираем следующее табло при повторном нажатии на Power или Ok
@@ -1106,6 +1114,7 @@ void IrControlButtonClick(uint8_t func)
 		case RC5POWER:
 		case RC5OK: {
 			_flash_LED1(1, 30);
+			display_7code(0x39, ABCD_T[1], 0, 0);
 			PrintStringToSerial("Button POWER OR OK CLICK OK");
 			//PrintStringToSerial("TRY ProgrammingModeButtonClick()");
 			isSettingsMode = 2; //если нажали Power или OK то взводим флаг что мы в режиме редактирования текущего табло
@@ -1115,6 +1124,7 @@ void IrControlButtonClick(uint8_t func)
 		//если нажата кнопка меню то переходим в режим настроек
 		case RC5MENU: {
 			_flash_LED1(1, 30);
+			display_7code(0x39, ABCD_T[2], ABCD_T[10], ABCD_T[qtTab]);
 			isSettingsMode = 1; // подняли флаг что мы в режиме настроек но ввод еще не закончен, потому как когда нажали меню мы сбрякаемся из этой функи сразу в проверку окончания ввода
 			isSettingsModeOver = 0; // флаг что ввод еще не окончен
 			DoBlinkingAllTabs(); //поморгали всеми табло в течении 3 секунд
