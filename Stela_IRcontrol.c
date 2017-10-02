@@ -637,8 +637,8 @@ void ADCluxmeter(uint8_t luxchannel)
 	{	
 		#ifdef DEBUG
 		{
-			PrintStringWithValToSerial("LOW v_ADC = ", (uint8_t) v_ADC);
-			PrintStringWithValToSerial("HIGH v_ADC = ", (uint8_t) (v_ADC>>8));
+			//PrintStringWithValToSerial("LOW v_ADC = ", (uint8_t) v_ADC);
+			//PrintStringWithValToSerial("HIGH v_ADC = ", (uint8_t) (v_ADC>>8));
 			display_dnum(v_ADC);
 			TabloUpdateTime = cntT1 + 5000;
 		}
@@ -841,6 +841,7 @@ int main(void)
 			}
 		}
 		
+		//чистка буфера каждые 24 часа
 		if (cntT1 > TxRxBufCleanPeriod) {
 			USART_FlushTxBuf();
 			USART_FlushRxBuf();
@@ -951,7 +952,7 @@ int main(void)
 			RCommand(Rfunc, isSettingsMode);
 			//если мы верно ввели количество табло в настройках то у нас isSettingsMode сохранится = 1 и мы сохраняемся в еепром + подтверждаем верный ввод еще одним морганием
 			if (isSettingsMode == 1 && isSettingsModeOver == 1) {
-				PrintStringToSerial(" if isSettingsMode == 1 && isSettingsModeOver == 1 OK ");
+				//PrintStringToSerial(" if isSettingsMode == 1 && isSettingsModeOver == 1 OK ");
 				eeprom_write_byte(EETab + 2, qtTab);
 				isSettingsMode = 0;
 				isSettingsModeOver = 0;
@@ -980,7 +981,7 @@ void SetCountTabs(uint8_t func)
 		case RC5DIG8:
 		case RC5DIG9: {
 			qtTab = func;
-			PrintStringWithValToSerial(" ---SetCountTabs() OK    qtTab = ", qtTab);
+			//PrintStringWithValToSerial(" ---SetCountTabs() OK    qtTab = ", qtTab);
 			isSettingsModeOver = 1; //поднимаем флаг что ввод окончен
 			break;
 		}
@@ -995,7 +996,7 @@ void SetCountTabs(uint8_t func)
 //Задаем значения на выбранном табло в режиме редактирования или же выбираем следующее табло при повторном нажатии на Power или Ok
 void SetSettingsFromIrControl(uint8_t func)
 {
-	PrintStringWithValToSerial(" ---SetSettingsFromIrControl() OK    KEY CODE = ", func);
+	//PrintStringWithValToSerial(" ---SetSettingsFromIrControl() OK    KEY CODE = ", func);
 
 	switch (func) {
 		//нажатие кнопки Power повторно
@@ -1025,7 +1026,7 @@ void SetSettingsFromIrControl(uint8_t func)
 			break;
 		}
 		default: {
-			PrintStringToSerial("PROGRAMMING MODE WRONG CODE");
+			//PrintStringToSerial("PROGRAMMING MODE WRONG CODE");
 			break;
 		}
 	}
@@ -1045,7 +1046,7 @@ void PowerButtonClickProgMode()
 		//PrintStringToSerial("Ntab > qtTab OK");
 		Ntab = 1; //тогда переключаемся снова на первое табло
 	}
-	PrintStringToSerial("DO BRIGHT all tabs OK");
+	//PrintStringToSerial("DO BRIGHT all tabs OK");
 	set_Bright(BriValues[MIDDLE_BRIGHT], 4); //яркость всех табло
 	//PrintStringToSerial("DO Blinking curr tab OK");
 	DoBlinking(Ntab); //начинаем моргать текущим табло
@@ -1074,7 +1075,7 @@ void OkButtonClickProgMode()
 
 void ExitButtonClickProgMode()
 {
-	PrintStringToSerial("EXIT EXIT EXIT");
+	//PrintStringToSerial("EXIT EXIT EXIT");
 	Ntab = 1;
 	isSettingsMode = 0;
 	ADCENABLE = 1;
@@ -1129,7 +1130,7 @@ void IrControlButtonClick(uint8_t func)
 		case RC5OK: {
 			_flash_LED1(1, 30);
 			display_7code(0x39, ABCD_T[1], 0, 0);//вывели на экран команду
-			PrintStringToSerial("Button POWER OR OK CLICK OK");
+			//PrintStringToSerial("Button POWER OR OK CLICK OK");
 			//PrintStringToSerial("TRY ProgrammingModeButtonClick()");
 			isSettingsMode = 2; //если нажали Power или OK то взводим флаг что мы в режиме редактирования текущего табло
 			ProgrammingModeButtonClick(1); //передали номер нижнего табло по нажатию ок
@@ -1155,7 +1156,7 @@ void IrControlButtonClick(uint8_t func)
 			break;
 		}
 		default: {
-			PrintStringWithValToSerial("WRONG BUTTON CLICK!");
+			//PrintStringWithValToSerial("WRONG BUTTON CLICK!");
 			_flash_LED1(4, 30);
 			break;
 		}
@@ -1209,7 +1210,7 @@ void DoBlinkingAllTabs() {
 void ProgrammingModeButtonClick(uint8_t _nTab) {
 	set_Bright(BriValues[MIDDLE_BRIGHT], 4);  //яркость всех табло
 	DoBlinking(_nTab); //начинаем моргать текущим табло (самым первым по индексу Ntab, выше = 1)
-	PrintStringToSerial("------Set DoBlinking(Ntab) OK   Ntab = ");
+	//PrintStringToSerial("------Set DoBlinking(Ntab) OK   Ntab = ");
 	
 	// 	doTimer = cntT1 + ONEMIN;		//плюс одна минута на редактирование
 	//

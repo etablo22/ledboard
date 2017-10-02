@@ -23,8 +23,8 @@
 #define USART_NORMAL  0
 #define USART_DOUBLED 1
 
-#define SIZE_BUF_RX 128       //задаем размер кольцевых буферов - <255
-#define SIZE_BUF_TX 128
+#define SIZE_BUF_RX 64       //задаем размер кольцевых буферов - <255
+#define SIZE_BUF_TX 64
 
 //****************************************************************************
 void USART_Init(uint8_t regime, uint16_t baudRate); //инициализация usart`a
