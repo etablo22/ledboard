@@ -120,9 +120,11 @@ uint8_t const LUM4 = 620;
 uint8_t const DASHCODE = 10;
 uint8_t const ADCLUXCOUNTER = 100; //количество измерений
 uint16_t j = 0, it1 = 0;
-unsigned long cntT1 = 0, TabloUpdateTime, ADCSTART;
+unsigned long cntT1 = 0, TabloUpdateTime, ADCSTART, TxRxBufCleanPeriod = 3600000;
 unsigned long doTimer = 0;
-uint32_t const ONEMIN = 5;
+uint32_t const ONEMIN = 60000;
+unsigned long const ONEDAY = 86400000;
+
 uint8_t dispcounter, OCRtest, cntT0;
 uint8_t cnt_btn0, cnt_btn1;
 int8_t TestCNT, INITtab = 0;
@@ -480,9 +482,9 @@ void set_Bright(uint16_t val, uint8_t param)
 		}
 		//установить яркость = val на всех табло
 		case 4: {
-			TXBRIDATA = 1;	//установить яркость = val на всех табло по флагу TXBRIDATA
 			ADCSTART=cntT1 + ONEMIN;	//остановка автоматического изменения яркости, запуск через минуту
 			BriLevels[BriMode] = val;				//
+			TxDATA(BROADCAST, BRIGHT, BriLevels[BriMode], BROADCAST, BRIGHT, BriLevels[BriMode]);	//установить яркость = val на всех табло
 			break;
 		}
 		case 5: {
@@ -632,11 +634,16 @@ void ADCluxmeter(uint8_t luxchannel)
 	
 	//изменение яркости в соответствии с измеренной освещенностью
 	if (adc_counter > ADCLUXCOUNTER)		//с периодичностью 10 сек
-	{
-		PrintStringWithValToSerial("LOW v_ADC = ", (uint8_t) v_ADC);
-		PrintStringWithValToSerial("HIGH v_ADC = ", (uint8_t) (v_ADC>>8));
-		//display_dnum(v_ADC);
-		TabloUpdateTime = cntT1 + 5000;
+	{	
+		#ifdef DEBUG
+		{
+			PrintStringWithValToSerial("LOW v_ADC = ", (uint8_t) v_ADC);
+			PrintStringWithValToSerial("HIGH v_ADC = ", (uint8_t) (v_ADC>>8));
+			display_dnum(v_ADC);
+			TabloUpdateTime = cntT1 + 5000;
+		}
+		#endif
+		
 		set_Bright(v_ADC, 2);		//установить режим яркости по освещенности
 		if (BriMode != preBriMode)	//если режим яркости изменился
 		{
@@ -646,7 +653,7 @@ void ADCluxmeter(uint8_t luxchannel)
 		//				else TXDATAEN &=~(0x01);	//запрещение TX при сохранении режима яркости
 		adc_counter = 0;
 		v_ADC = 0;
-		_flash_LED1(3, 500);
+		_flash_LED1(3, 20);
 	}
 }
 
@@ -673,6 +680,7 @@ void _SOFTRESET(void)
 	sei();
 	display_10code(Digit[0], Digit[1], Digit[2], Digit[3]);
 }
+
 
 //установка начальных значений переменных
 void Initialize(void)
@@ -729,7 +737,6 @@ void Initialize(void)
 
 	_flash_LED1(3, 50);
 }
-
 
 
 
@@ -832,6 +839,12 @@ int main(void)
 				Initialize();
 				_SOFTRESET();
 			}
+		}
+		
+		if (cntT1 > TxRxBufCleanPeriod) {
+			USART_FlushTxBuf();
+			USART_FlushRxBuf();
+			TxRxBufCleanPeriod = cntT1 + ONEDAY;
 		}
 		
 		//обновление данных на табло по достижению счетчика cntT1 + TabloUpdatePeriod
@@ -943,7 +956,8 @@ int main(void)
 				isSettingsMode = 0;
 				isSettingsModeOver = 0;
 				//PrintStringToSerial(" TRY DoBlinkingAllTabs() ");
-				DoBlinkingAllTabs(); //поморгали всеми табло в течении 3 секунд если верный ввод
+				display_7code(0x39, ABCD_T[2], ABCD_T[10], ABCD_T[qtTab]); //вывели на экран новое значение количества табло
+				DoBlinking(1); //поморгали ведущим табло в течении 3 секунд
 			}
 			rc5_data=0;
 		}
@@ -1100,7 +1114,7 @@ void DigitButtonClickProgMode(uint8_t buttonCode)
 		display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], 0x0F);	//прямое отображение
 	}
 	//отправка новой цены на редактируемое табло
-	TxDATA(TADR + Ntab, RXTDATA, DigTmp[0], DigTmp[1], DigTmp[2], DigTmp[3]);
+	TxDATA(TADR0 + Ntab, RXTDATA, DigTmp[0], DigTmp[1], DigTmp[2], DigTmp[3]);
 	_delay_ms(300);
 }
 
@@ -1114,7 +1128,7 @@ void IrControlButtonClick(uint8_t func)
 		case RC5POWER:
 		case RC5OK: {
 			_flash_LED1(1, 30);
-			display_7code(0x39, ABCD_T[1], 0, 0);
+			display_7code(0x39, ABCD_T[1], 0, 0);//вывели на экран команду
 			PrintStringToSerial("Button POWER OR OK CLICK OK");
 			//PrintStringToSerial("TRY ProgrammingModeButtonClick()");
 			isSettingsMode = 2; //если нажали Power или OK то взводим флаг что мы в режиме редактирования текущего табло
@@ -1124,10 +1138,10 @@ void IrControlButtonClick(uint8_t func)
 		//если нажата кнопка меню то переходим в режим настроек
 		case RC5MENU: {
 			_flash_LED1(1, 30);
-			display_7code(0x39, ABCD_T[2], ABCD_T[10], ABCD_T[qtTab]);
+			display_7code(0x39, ABCD_T[2], ABCD_T[10], ABCD_T[qtTab]); //вывели на экран команду и количество табло
 			isSettingsMode = 1; // подняли флаг что мы в режиме настроек но ввод еще не закончен, потому как когда нажали меню мы сбрякаемся из этой функи сразу в проверку окончания ввода
 			isSettingsModeOver = 0; // флаг что ввод еще не окончен
-			DoBlinkingAllTabs(); //поморгали всеми табло в течении 3 секунд
+			DoBlinking(1); //поморгали ведущим табло в течении 3 секунд
 			break;
 		}
 		//нажатие кнопки Vol+
