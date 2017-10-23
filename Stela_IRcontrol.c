@@ -120,11 +120,9 @@ uint16_t const LUM4 = 620;
 uint8_t const DASHCODE = 10;
 uint8_t const ADCLUXCOUNTER = 100; //количество измерений
 uint16_t j = 0, it1 = 0;
-unsigned long cntT1 = 0, TabloUpdateTime, ADCSTART, TxRxBufCleanPeriod = 3600000;
-unsigned long doTimer = 0;
-uint32_t const ONEMIN = 60000;
-unsigned long const ONEDAY = 86400000;
-
+uint32_t cntT1 = 0, cntTabloUpdate, cntADCSTART, cntExitProgMode, TxRxBufCleanPeriod = 3600000;		//глобальный таймер-счетчик с периодом 1 мс
+uint32_t const ONEMIN = 60000, ONEDAY = 86400000;
+uint32_t const cntMaxPeriod = 3800000000;		//максимальное значение таймер-счетчика с запасом примерно 10 суток
 uint8_t dispcounter, OCRtest, cntT0;
 uint8_t cnt_btn0, cnt_btn1;
 int8_t TestCNT, INITtab = 0;
@@ -475,7 +473,7 @@ void set_Bright(uint16_t val, uint8_t param)
 		//действия при изменении яркости по команде:
 		//сброс измерения освещенности и настройка записи режимов яркости в ЕЕ
 		case 3: {
-			ADCSTART=cntT1 + 30000;	//остановка автоматического изменения яркости, запуск через неск.секунд в модуле if(DISPLAY)
+			cntADCSTART=cntT1 + ONEMIN;	//остановка автоматического изменения яркости, запуск через одну минуту
 			WRITEEEBRI = 0;	//исключить лишнюю запись в ЕЕ -
 			CHBRI = 1;		//разрешение WRITEEEBRI через неск.секунд в case 1 и case 2
 			TXBRIDATA = 1;	//отправка значения яркости на ведомые табло
@@ -483,13 +481,13 @@ void set_Bright(uint16_t val, uint8_t param)
 		}
 		//установить яркость = val на всех табло
 		case 4: {
-			ADCSTART = cntT1 + ONEMIN;	//остановка автоматического изменения яркости, запуск через минуту
+			cntADCSTART = cntT1 + ONEMIN;	//остановка автоматического изменения яркости, запуск через минуту
 			BriLevels[BriMode] = val;				//
 			TxDATA(BROADCAST, BRIGHT, BriLevels[BriMode], BROADCAST, BRIGHT, BriLevels[BriMode]);	//установить яркость = val на всех табло
 			break;
 		}
 		case 5: {
-			ADCSTART=cntT1 + ONEMIN;	//остановка автоматического изменения яркости, запуск через минуту
+			cntADCSTART=cntT1 + ONEMIN;	//остановка автоматического изменения яркости, запуск через минуту
 			BriLevels[BriMode] = val;				//
 			break;
 		}
@@ -552,7 +550,7 @@ void COMMANDS(uint8_t func) {
 			}
 
 			WRITEEEDIG = 1;	//записать значение цены в ЕЕ
-			TabloUpdateTime = 1;	 	//обновить инф. на табло
+			cntTabloUpdate = 1;	 	//обновить инф. на табло
 			_LED1(0);
 			break;
 		}
@@ -567,7 +565,7 @@ void COMMANDS(uint8_t func) {
 			}
 			display_dnum(mode);					//показать номер режима
 			TCNT1 = 0;
-			TabloUpdateTime = 0;					//задержать обновление табло
+			cntTabloUpdate = 0;					//задержать обновление табло
 			_LED1(0);
 			break;
 		}
@@ -580,7 +578,7 @@ void COMMANDS(uint8_t func) {
 			}
 			display_dnum(TADR);					//показать адрес табло
 			TCNT1 = 0;
-			TabloUpdateTime = 0;					//задержать обновление табло
+			cntTabloUpdate = 0;					//задержать обновление табло
 			break;
 		}
 		//программный сброс
@@ -641,7 +639,7 @@ void ADCluxmeter(uint8_t luxchannel)
 			//PrintStringWithValToSerial("LOW v_ADC = ", (uint8_t) v_ADC);
 			//PrintStringWithValToSerial("HIGH v_ADC = ", (uint8_t) (v_ADC>>8));
 			display_dnum(v_ADC);
-			TabloUpdateTime = cntT1 + 5000;
+			cntTabloUpdate = cntT1 + 5000;
 		}
 		#endif
 		
@@ -700,7 +698,7 @@ void Initialize(void)
 	j = 0;
 	it1 = 0;
 	
-	TabloUpdateTime = TabloUpdatePeriod;
+	cntTabloUpdate = TabloUpdatePeriod;
 	cntT1 = 0;
 	CHBRI = 0;
 	ADCENABLE = 1;			//разрешить преобразования АЦП
@@ -712,8 +710,9 @@ void Initialize(void)
 	READEEDIG = 1;
 	READEEBRI = 1;
 	SOFTRESET = 0;
-	ADCSTART = 0;
+	cntADCSTART = 0;
 	adc_counter = 0;
+	cntExitProgMode = cntT1 + (ONEMIN * 5);
 	
 	BriMode = 2;
 	BriStep = _getBriStep(BriLevels[BriMode]);
@@ -843,6 +842,15 @@ int main(void)
 			}
 		}
 		
+		//проверка переполнения переменных, использующих таймер-счетчик
+		if (cntT1 > cntMaxPeriod)
+		{
+			cntADCSTART = cntADCSTART - cntT1;				//корректировка таймера
+			cntTabloUpdate = cntTabloUpdate - cntT1;		//
+			cntExitProgMode = cntExitProgMode - cntT1;		//
+			cntT1 = 0;
+		}
+		
 		//чистка буфера каждые 24 часа
 		if (cntT1 > TxRxBufCleanPeriod) {
 			USART_FlushTxBuf();
@@ -851,9 +859,9 @@ int main(void)
 		}
 		
 		//обновление данных на табло по достижению счетчика cntT1 + TabloUpdatePeriod
-		if (cntT1 > TabloUpdateTime && isSettingsMode == 0) {
+		if (cntT1 > cntTabloUpdate && isSettingsMode == 0) {
 			_LED1(1);
-			TabloUpdateTime = cntT1 + TabloUpdatePeriod;
+			cntTabloUpdate = cntT1 + TabloUpdatePeriod;
 			if (Digit[3] == 10) {
 				Digit[3] = 0;
 				Digit[2]++;
@@ -876,10 +884,10 @@ int main(void)
 		}
 		
 		//запуск измерений АЦП
-		if ((cntT1 > ADCSTART) && ADCENABLE)
+		if ((cntT1 > cntADCSTART) && ADCENABLE)
 		{
 			//PrintStringToSerial("INTO ADC FINE!");
-			ADCSTART=cntT1 + 100;	//примерно с периодом 0.1 сек
+			cntADCSTART=cntT1 + 100;	//примерно с периодом 0.1 сек
 			ADCluxmeter(ADCLUXCH);
 		}
 
@@ -944,6 +952,13 @@ int main(void)
 			_LED1(0);
 		}//UART
 
+		//таймер выхода из режима редактирования
+		if (isSettingsMode && (cntT1 > cntExitProgMode))
+		{
+			isSettingsMode = 0;
+			ExitButtonClickProgMode();
+		}
+		
 		//обработчик команд, поступающих по ИК-
 		if (rc5_data)
 		{
@@ -1136,6 +1151,7 @@ void IrControlButtonClick(uint8_t func)
 			//PrintStringToSerial("TRY ProgrammingModeButtonClick()");
 			Ntab = 1; //сброс номера табло
 			isSettingsMode = 2; //если нажали Power или OK то взводим флаг что мы в режиме редактирования текущего табло
+			cntExitProgMode = cntT1 + (ONEMIN * 5);
 			CountDigitButtonClick = 0; //сброс нажатий на цифры
 			ProgrammingModeButtonClick(1); //передали номер нижнего табло
 			break;
