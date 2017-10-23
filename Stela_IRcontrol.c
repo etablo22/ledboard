@@ -120,7 +120,12 @@ uint16_t const LUM4 = 620;
 uint8_t const DASHCODE = 10;
 uint8_t const ADCLUXCOUNTER = 100; //количество измерений
 uint16_t j = 0, it1 = 0;
-uint32_t cntT1 = 0, cntTabloUpdate, cntADCSTART, cntExitProgMode, TxRxBufCleanPeriod = 3600000;		//глобальный таймер-счетчик с периодом 1 мс
+
+//cntTabloUpdate - таймер обновления данных в регистрах табло
+//cntADCSTART - таймер измерений освещенности через АЦП
+//cntExitProgMode - таймер автоматического выхода из режима редактирования
+//TxRxBufCleanPeriod - таймер очистки буферов приема и передачи UART
+uint32_t cntT1 = 0, cntTabloUpdate, cntADCSTART, cntExitProgMode, TxRxBufCleanPeriod = 3600000;		//cntT1 - глобальный таймер-счетчик с периодом 1 мс
 uint32_t const ONEMIN = 60000, ONEDAY = 86400000;
 uint32_t const cntMaxPeriod = 3800000000;		//максимальное значение таймер-счетчика с запасом примерно 10 суток
 uint8_t dispcounter, OCRtest, cntT0;
@@ -955,8 +960,7 @@ int main(void)
 		//таймер выхода из режима редактирования
 		if (isSettingsMode && (cntT1 > cntExitProgMode))
 		{
-			isSettingsMode = 0;
-			ExitButtonClickProgMode();
+			ExitButtonClickProgMode();		//запуск процедуры выхода из режима программирования
 		}
 		
 		//обработчик команд, поступающих по ИК-
