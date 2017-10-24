@@ -975,8 +975,7 @@ int main(void)
 			if (isSettingsMode == 1 && isSettingsModeOver == 1) {
 				//PrintStringToSerial(" if isSettingsMode == 1 && isSettingsModeOver == 1 OK ");
 				eeprom_write_byte(EETab + 2, qtTab);
-				isSettingsMode = 0;
-				isSettingsModeOver = 0;
+				ExitButtonClickProgMode(); //Вернули все флаги на место
 				//PrintStringToSerial(" TRY DoBlinkingAllTabs() ");
 				display_7code(0x39, ABCD_T[2], ABCD_T[10], ABCD_T[qtTab]); //вывели на экран новое значение количества табло
 				DoBlinking(1); //поморгали ведущим табло в течении 3 секунд
@@ -1007,7 +1006,7 @@ void SetCountTabs(uint8_t func)
 			break;
 		}
 		default: {
-			isSettingsMode = 0; //если неверно ввели то выходим из режима настроек
+			ExitButtonClickProgMode(); //если неверно ввели то выходим из режима настроек
 			break;
 		}
 	}
@@ -1097,10 +1096,10 @@ void OkButtonClickProgMode()
 void ExitButtonClickProgMode()
 {
 	//PrintStringToSerial("EXIT EXIT EXIT");
-	//Ntab = 1;
 	isSettingsMode = 0;
 	ADCENABLE = 1;
 	READEEBRI = 1; //читаем яркость из ЕЕ
+	isSettingsModeOver = 0; //флаг окончания ввода количества табло 
 	
 	if (CountDigitButtonClick > 0) {
 		//PrintStringToSerial(" ------TRY EepromWritePrice()");
@@ -1157,6 +1156,7 @@ void IrControlButtonClick(uint8_t func)
 			isSettingsMode = 2; //если нажали Power или OK то взводим флаг что мы в режиме редактирования текущего табло
 			cntExitProgMode = cntT1 + (ONEMIN * 5);
 			CountDigitButtonClick = 0; //сброс нажатий на цифры
+			ADCENABLE = 0; //Зарпещаем измерение датчика освещенности пока находимся в режиме программирования
 			ProgrammingModeButtonClick(1); //передали номер нижнего табло
 			break;
 		}
@@ -1166,6 +1166,7 @@ void IrControlButtonClick(uint8_t func)
 			display_7code(SYMB_C, ABCD_T[2], ABCD_T[10], ABCD_T[qtTab]); //вывели на экран команду и количество табло С2 - 5 что мы в режиме настроек
 			isSettingsMode = 1; // подняли флаг что мы в режиме настроек но ввод еще не закончен, потому как когда нажали меню мы сбрякаемся из этой функи сразу в проверку окончания ввода
 			isSettingsModeOver = 0; // флаг что ввод еще не окончен
+			ADCENABLE = 0; //Зарпещаем измерение датчика освещенности пока находимся в режиме конфигурирования
 			DoBlinking(1); //поморгали ведущим табло в течении 3 секунд
 			break;
 		}
@@ -1235,23 +1236,6 @@ void ProgrammingModeButtonClick(uint8_t _nTab) {
 	set_Bright(BriValues[MIDDLE_BRIGHT], 4);  //яркость всех табло
 	DoBlinking(_nTab); //начинаем моргать текущим табло (самым первым по индексу Ntab, выше = 1)
 	//PrintStringToSerial("------Set DoBlinking(Ntab) OK   Ntab = ");
-	
-	// 	doTimer = cntT1 + ONEMIN;		//плюс одна минута на редактирование
-	//
-	// 	while (cntT1 < doTimer) {
-	// 		if (rc5_data)
-	// 		{
-	// 			doTimer = cntT1 + ONEMIN;		//плюс одна минута на редактирование
-	// 			j = rc5_data;
-	// 			Rfunc = ((j & 0x3F) | (~j >> 7 & 0x40)); //Выделяем только код команды
-	// 			PrintStringToSerial(" INTO WHILE  if (rc5_data) OK OK OK");
-	// 			RCommand(Rfunc, isSettingsMode);//парсим команду с ИК
-	// 			rc5_data = 0;
-	// 		}
-	// 		_delay_ms(10);	//иначе while не сработает
-	// 	}
-	// 	isSettingsMode = 0;
-	// 	PrintStringToSerial("................OUT FROM WHILE.................");
 }
 
 void PrintStringWithValToSerial(char* string, uint8_t val)
