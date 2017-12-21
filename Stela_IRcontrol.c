@@ -32,11 +32,23 @@ CountDigitButtonClick - счетчик нажатия цифровых кноп�
 #include <util/delay.h>
 #include <avr/eeprom.h>
 #include <avr/pgmspace.h>
+#include <avr/wdt.h>
 
 #include "rc5_german.h"
 #include "ADC_lib.h"
 #include "usart.h"
 #include "Ind_lib_v2.1.h"
+
+#define BIT(x) 			(1 << (x))
+#define SETBITS(x,y) 	((x) |= (y))
+#define CLEARBITS(x,y) 	((x) &= (~(y)))
+#define SETBIT(x,y) 	SETBITS((x), (BIT((y))))			/* EXAMPLE SETBIT(PORTB,2) sets the 2 bit of PORTB */
+#define CLEARBIT(x,y) 	CLEARBITS((x), (BIT((y))))
+#define BITSET(x,y) 	((x) & (BIT(y)))
+#define BITCLEAR(x,y) 	!BITSET((x), (y))
+#define BITSSET(x,y) 	(((x) & (y)) == (y))
+#define BITSCLEAR(x,y) 	(((x) & (y)) == 0)
+#define BITVAL(x,y) 	(((x)>>(y)) & 1)
 
 //команды протокола
 #define BRIGHT		0xA0	//команда установить значение яркости = 160
@@ -63,7 +75,7 @@ uint8_t const TADR0 =    	0x64;	//адрес нулевого табло (нач
 #define LED1		PD4		//порт индикатора
 #define DDR_RS485	DDRD	//порт интерфейса
 #define PORT_RS485	PORTD	//порт интерфейса
-#define PTXEN		PD2		//порт интерфейса 
+#define PTXEN		PD2		//порт интерфейса
 #define RXD			PD0		//вход UART - приемник
 #define TXD			PD1		//выход UART - передатчик
 #define MAXINDMODE	1		//количество режимов индикации
@@ -116,6 +128,11 @@ uint16_t const LUM4 = 620;
 #define RC5EXIT			56
 #define RC5MENU			63
 
+uint8_t maskDegVal = 0x0F; //значение маски для включения разрядов
+const uint8_t SHIFTYELLOBUTTON = 3; //значение на которое сдвигаем разряд маски для включения точки
+const uint8_t SHIFTBLUEBUTTON = 1;//значение на которое сдвигаем разряд маски для включения ЭКТО
+const uint8_t SHIFTREDBUTTON = 4;//значение на которое сдвигаем разряд маски для включения СНЕЖИНКА
+const uint8_t SHIFTGREENBUTTON = 2;//значение на которое сдвигаем разряд маски для включения ЕВРО
 
 uint8_t const DASHCODE = 10;
 uint8_t const ADCLUXCOUNTER = 100; //количество измерений
@@ -153,9 +170,10 @@ BriLevels[3] = {20, 95, 214},
 BriValues[12] = {5, 30, 40, 50, 62, 77, 95, 118, 146, 181, 214, 250},
 BriStep;
 
-//----------------------------------0-----1-----2-----3-----4-----5-----6-----7-----8------9--minus--null---^C--
+//-------------------------------0-----1-----2-----3-----4-----5-----6-----7-----8------9--minus--null---^C--
 uint8_t ABCD_T [MAXDIGNUMBER]= {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x40, 0x00, 0x63};
 #define SYMB_C	0x39 //символ С (аббривиатура команда)
+#define SYMB_MINUS_Indx 10 //индекс символа минус из массива ABCD_T для функции display_10code_point
 
 
 //EEdata - 4Б: данные для настройки табло
@@ -638,13 +656,13 @@ void ADCluxmeter(uint8_t luxchannel)
 	
 	//изменение яркости в соответствии с измеренной освещенностью
 	if (adc_counter > ADCLUXCOUNTER)		//с периодичностью 10 сек
-	{	
+	{
 		#ifdef DEBUG
 		{
 			//PrintStringWithValToSerial("LOW v_ADC = ", (uint8_t) v_ADC);
 			//PrintStringWithValToSerial("HIGH v_ADC = ", (uint8_t) (v_ADC>>8));
 			display_dnum(v_ADC);
-			cntTabloUpdate = cntT1 + 5000;
+			cntTabloUpdate = cntT1 + 1000;
 		}
 		#endif
 		
@@ -727,7 +745,7 @@ void Initialize(void)
 	initBTN();			//обработка в T1_OVF
 	init595();
 	initPWM();
-	initT1(0x0A, 1843);		//16-битный, clk/2, режим СТС, OCR1A = 1843, период  1 мс
+	initT1(0b00001010, 1843);		//16-битный, clk/2, режим СТС, OCR1A = 1843, период  1 мс
 	adc_init();
 	USART_Init(USART_DOUBLED, 19200);
 	USART_FlushTxBuf();
@@ -836,6 +854,7 @@ int main(void)
 
 	while(1)
 	{
+		wdt_enable(WDTO_2S); //вочдог таймер на 2 секунды, если зависли то хардресет (не забываем про фьюзы)
 		//программный сброс
 		if (SOFTRESET) {
 			if (WDTCR & (1 << WDE)) {
@@ -846,6 +865,8 @@ int main(void)
 				_SOFTRESET();
 			}
 		}
+		
+		
 		
 		//проверка переполнения переменных, использующих таймер-счетчик
 		if (cntT1 > cntMaxPeriod)
@@ -884,7 +905,7 @@ int main(void)
 				Digit[0] = 0;
 			}
 			
-			display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3]++, 0x0F);	//прямое отображение
+			display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3]++, maskDegVal);	//прямое отображение
 			_LED1(0);
 		}
 		
@@ -892,7 +913,7 @@ int main(void)
 		if ((cntT1 > cntADCSTART) && ADCENABLE)
 		{
 			//PrintStringToSerial("INTO ADC FINE!");
-			cntADCSTART=cntT1 + 100;	//примерно с периодом 0.1 сек
+			cntADCSTART=cntT1 + 20;	//примерно с периодом 0.02 сек
 			ADCluxmeter(ADCLUXCH);
 		}
 
@@ -1032,6 +1053,33 @@ void SetSettingsFromIrControl(uint8_t func)
 			ExitButtonClickProgMode();
 			break;
 		}
+		case RC5TEXT: {
+			//когда отловили именно нажатие кнопки текс на пульте (код 42) то посылаем в функцию именно индекс этого символа в массиве ABCD_T
+			//потому что в массив Digit[] записываются именно индексы соответствующие массиву ABCD_T, а далее вызывается функция display_10code_point
+			//которая отображает уже символы из массива ABCD_T по индексу
+			DigitButtonClickProgMode(SYMB_MINUS_Indx); break;
+		}
+		
+		case RC5RED:
+		{
+			ColorButtonsClick(SHIFTREDBUTTON);
+			break;
+		}
+		case RC5GREEN:
+		{
+			ColorButtonsClick(SHIFTGREENBUTTON);
+			break;
+		}
+		case RC5BLUE:
+		{
+			ColorButtonsClick(SHIFTBLUEBUTTON);
+			break;
+		}
+		case RC5YELLOW: {
+			ColorButtonsClick(SHIFTYELLOBUTTON);
+			break;
+		}
+		
 		case RC5DIG0:
 		case RC5DIG1:
 		case RC5DIG2:
@@ -1050,6 +1098,13 @@ void SetSettingsFromIrControl(uint8_t func)
 			break;
 		}
 	}
+}
+
+void ColorButtonsClick(uint8_t buttonCode)
+{
+	if (maskDegVal && (1 << buttonCode)) BITCLEAR(maskDegVal, buttonCode);
+	else BITSET(maskDegVal, buttonCode);
+	display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], maskDegVal);	//прямое отображение
 }
 
 void PowerButtonClickProgMode()
@@ -1099,7 +1154,7 @@ void ExitButtonClickProgMode()
 	isSettingsMode = 0;
 	ADCENABLE = 1;
 	READEEBRI = 1; //читаем яркость из ЕЕ
-	isSettingsModeOver = 0; //флаг окончания ввода количества табло 
+	isSettingsModeOver = 0; //флаг окончания ввода количества табло
 	
 	if (CountDigitButtonClick > 0) {
 		//PrintStringToSerial(" ------TRY EepromWritePrice()");
