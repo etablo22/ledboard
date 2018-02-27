@@ -170,7 +170,7 @@ uint8_t BriMode,
 preBriMode,
 BriLevels[3] = {5, 95, 214},
 BriValues[12] = {5, 30, 40, 50, 62, 77, 95, 118, 146, 181, 214, 250},
-BriStep;
+BriStep = 0;
 
 //-------------------------------0-----1-----2-----3-----4-----5-----6-----7-----8------9--minus--null---^C--
 uint8_t ABCD_T [MAXDIGNUMBER]= {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x40, 0x00, 0x63};
@@ -719,7 +719,7 @@ void Initialize(void)
 	DDRLED |= (1 << LED1);//|_BV(LED2);
 	
 	digit_sort(2, 3, 0, 1); //сортировка разрядов табло
-	set_PWC(2); //установка режима поразрядной индикации
+	set_PWC(3); //установка режима поразрядной индикации
 	
 	j = 0;
 	it1 = 0;
@@ -1072,23 +1072,20 @@ void SetSettingsFromIrControl(uint8_t func)
 			break;
 		}
 		
-		case RC5RED:
-		{
-			ColorButtonsClick(SHIFTREDBUTTON);
+		case RC5RED: {
+			//ColorButtonsClick(SHIFTREDBUTTON);
 			break;
 		}
-		case RC5GREEN:
-		{
-			ColorButtonsClick(SHIFTGREENBUTTON);
+		case RC5GREEN: {
+			//ColorButtonsClick(SHIFTGREENBUTTON);
 			break;
 		}
-		case RC5BLUE:
-		{
-			ColorButtonsClick(SHIFTBLUEBUTTON);
+		case RC5BLUE: {
+			//ColorButtonsClick(SHIFTBLUEBUTTON);
 			break;
 		}
 		case RC5YELLOW: {
-			ColorButtonsClick(SHIFTYELLOBUTTON);
+			//ColorButtonsClick(SHIFTYELLOBUTTON);
 			break;
 		}
 		
@@ -1114,8 +1111,12 @@ void SetSettingsFromIrControl(uint8_t func)
 
 void ColorButtonsClick(uint8_t buttonCode)
 {
-	if (maskDegVal && (1 << buttonCode)) BITCLEAR(maskDegVal, buttonCode);
-	else BITSET(maskDegVal, buttonCode);
+	if (maskDegVal & (1 << buttonCode)) {
+		BITCLEAR(maskDegVal, buttonCode);
+	}
+	else { 
+		BITSET(maskDegVal, buttonCode);
+	}
 	display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], maskDegVal);	//прямое отображение
 }
 
