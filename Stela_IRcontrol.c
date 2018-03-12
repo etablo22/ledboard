@@ -145,7 +145,7 @@ uint16_t j = 0, it1 = 0;
 //cntExitProgMode - таймер автоматического выхода из режима редактирования
 //TxRxBufCleanPeriod - таймер очистки буферов приема и передачи UART
 uint32_t cntT1 = 0, cntTabloUpdate, cntADCSTART, cntExitProgMode, TxRxBufCleanPeriod = 3600000;		//cntT1 - глобальный таймер-счетчик с периодом 1 мс
-uint32_t const ONEMIN = 60000, ONEDAY = 86400000;
+uint32_t const ONESEC = 1000, ONEMIN = 60000, ONEDAY = 86400000;
 uint32_t const cntMaxPeriod = 3800000000;		//максимальное значение таймер-счетчика с запасом примерно 10 суток
 uint8_t dispcounter, OCRtest, cntT0;
 uint8_t cnt_btn0, cnt_btn1;
@@ -661,10 +661,10 @@ void ADCluxmeter(uint8_t luxchannel)
 		//отображение значения яркости для тестов---------------------
 		//#ifdef DEBUG
 		//{
-			////PrintStringWithValToSerial("LOW v_ADC = ", (uint8_t) v_ADC);
-			////PrintStringWithValToSerial("HIGH v_ADC = ", (uint8_t) (v_ADC>>8));
-			//display_dnum(v_ADC); //отображение значения яркости
-			//cntTabloUpdate = cntT1 + 1000; //отображаем значение яркости 1 секунду
+		////PrintStringWithValToSerial("LOW v_ADC = ", (uint8_t) v_ADC);
+		////PrintStringWithValToSerial("HIGH v_ADC = ", (uint8_t) (v_ADC>>8));
+		//display_dnum(v_ADC); //отображение значения яркости
+		//cntTabloUpdate = cntT1 + 1000; //отображаем значение яркости 1 секунду
 		//}
 		//#endif
 		//отображение значения яркости для тестов---------------------
@@ -719,7 +719,7 @@ void Initialize(void)
 	DDRLED |= (1 << LED1);//|_BV(LED2);
 	
 	digit_sort(2, 3, 0, 1); //сортировка разрядов табло
-	set_PWC(3); //установка режима поразрядной индикации
+	set_PWC(4); //установка режима поразрядной индикации
 	
 	j = 0;
 	it1 = 0;
@@ -771,89 +771,7 @@ void Initialize(void)
 int main(void)
 {
 	Initialize();
-
-	// 	initT1(0x00);	//остановка таймера для исключения ложного срабатывания
-	// 	cntT1=0;
-	// 	REPRESSBTN1=1;
-	// 	while (PRESSBTN1) //пока кнопка BTN1 не будет отпущена
-	// 	{
-	// 		//вход в режим инициализации - нажатие кнопки в течение 3 сек
-	// 		//исключаем ошибку случайного замыкания кнопки при сбросе питания (например, из-за снега или дождя)
-	// 		//при нажатии кнопки более 15ти сек - выход из режима инициализации
-	// 		if (REPRESSBTN1)		//однократное выполнение при длительном нажатии
-	// 		{
-	// 			_LED1(1);
-	// 			initT1(0x05);		//запускаем таймер длительности нажатия
-	// 			REPRESSBTN1=0;
-	// 		}
-	// 		if (cntT1==1)		//подтверждение запуска инициализации при удержании кнопки примерно 1 сек
-	// 		{
-	// 			cntT1=2;
-	// 			INITtab=3;	//установка параметра для инициализации табло
-	// 			display_7code(0x08,0x08,0x08,0x08);
-	// 			_flash_LED1(1,200);
-	// 		}
-	// 		if (cntT1>4)		//слишком длительное нажатие (например при замыкании из-за влаги)
-	// 		{
-	// 			INITtab=0;	//пропуcтить инициализацию при превышении времени удержания кнопки
-	// 			cntT1=0;
-	// 			_flash_LED1(5,50);
-	// 			break;				//выход из цикла и запуск работы табло
-	// 		}
-	// 		_delay_ms(10); //без этой задержки не выходит из цикла при отпускании кнопки PRESSBTN, возможно из-за оптимизации кода компилятором
-	// 	}
-	// 	REPRESSBTN1=1;
-	// 	_LED1(0);
-	//
-	// 	//выполнить инициализацию - определение номера табло Ntab
-	// 	while(INITtab)
-	// 	{
-	// 		//при нажатии BTN1 инкремент Ntab
-	// 		if (PRESSBTN1)
-	// 		{
-	// 			if (REPRESSBTN1)
-	// 			{
-	// 				_flash_LED1(1,20);
-	// 				REPRESSBTN1=0;
-	// 				WRITEEENTAB=1;
-	// 				if (Ntab < MAXNTAB)
-	// 				{
-	// 					Ntab++;	//максимальный номер табло MAXNTAB (12)
-	// 				}
-	// 				else
-	// 				{
-	// 					Ntab=0;
-	// 				}
-	// 				display_dnum(Ntab);
-	// 				INITtab=2;		//сброс выхода из инициализации
-	// 				cntT1=0; TCNT1=0;		//сброс счетчика Т1
-	// 			}
-	// 		}
-	// 		else REPRESSBTN1=1;
-	//
-	// 		//индикация номера табло и отсчет завершения инициализации
-	// 		if (cntT1)
-	// 		{
-	// 			if (Ntab) _flash_LED1(Ntab,200);
-	// 			else _flash_LED1(2,30);
-	// 			INITtab--;			//завершение инициализации по обнулении параметра INITIALIZATION
-	// //			cntT1=0; TCNT1=0;		//сброс счетчика Т1
-	// 			TADR = TADR0 + Ntab;
-	// 			display_dnum(TADR);
-	// 		}
-	// 	}
-	// 	//при завершении инициализации запись в ЕЕ номера табло
-	// 	if (WRITEEENTAB) {
-	// 		TADR = TADR0 + Ntab;
-	// 		WRITEEENTAB=0;
-	// 		cli();
-	// 		eeprom_write_byte(EETab,Ntab);
-	// 		eeprom_write_byte(EETab+1,TADR);
-	// 		sei();
-	// 	}
-	//
-	// 	_UPDATEDATA();
-	// 	_delay_ms(500);		//отображение адреса табло 500мс
+	setBoardAddr(); //установка адреса табло перед главным циклом
 
 	while(1)
 	{
@@ -868,8 +786,6 @@ int main(void)
 				_SOFTRESET();
 			}
 		}
-		
-		
 		
 		//проверка переполнения переменных, использующих таймер-счетчик
 		if (cntT1 > cntMaxPeriod)
@@ -894,22 +810,22 @@ int main(void)
 			
 			//Реализация таймера для тестов-----------------
 			//if (Digit[3] == 10) {
-				//Digit[3] = 0;
-				//Digit[2]++;
-				//
+			//Digit[3] = 0;
+			//Digit[2]++;
+			//
 			//}
 			//if (Digit[2] >= 6) {
-				//Digit[2] = 0;
-				//Digit[1]++;
+			//Digit[2] = 0;
+			//Digit[1]++;
 			//}
 			//if (Digit[1] == 10) {
-				//Digit[1] = 0;
-				//Digit[0]++;
+			//Digit[1] = 0;
+			//Digit[0]++;
 			//}
 			//if (Digit[0] >= 6) {
-				//Digit[0] = 0;
+			//Digit[0] = 0;
 			//}
-			//display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3]++, maskDegVal);	//прямое отображение 
+			//display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3]++, maskDegVal);	//прямое отображение
 			//Реализация таймера для тестов-----------------
 			
 			display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], maskDegVal);	//прямое отображение
@@ -1003,10 +919,10 @@ int main(void)
 			if (isSettingsMode == 1 && isSettingsModeOver == 1) {
 				//PrintStringToSerial(" if isSettingsMode == 1 && isSettingsModeOver == 1 OK ");
 				eeprom_write_byte(EETab + 2, qtTab);
-				ExitButtonClickProgMode(); //Вернули все флаги на место
-				//PrintStringToSerial(" TRY DoBlinkingAllTabs() ");
 				display_7code(0x39, ABCD_T[2], ABCD_T[10], ABCD_T[qtTab]); //вывели на экран новое значение количества табло
 				DoBlinking(1); //поморгали ведущим табло в течении 3 секунд
+				ExitButtonClickProgMode(); //Вернули все флаги на место
+				//PrintStringToSerial(" TRY DoBlinkingAllTabs() ");
 			}
 			rc5_data=0;
 		}
@@ -1014,6 +930,93 @@ int main(void)
 	}//while(1)
 
 }//main()
+
+void setBoardAddr() {
+	
+	//initT1(0x00, 0);	//остановка таймера для исключения ложного срабатывания
+	cntT1 = 0;
+	REPRESSBTN1 = 1;
+	
+	while (PRESSBTN1) //пока кнопка BTN1 не будет отпущена
+	{
+		//вход в режим инициализации - нажатие кнопки в течение 3 сек
+		//исключаем ошибку случайного замыкания кнопки при сбросе питания (например, из-за снега или дождя)
+		//при нажатии кнопки более 15ти сек - выход из режима инициализации
+		if (REPRESSBTN1)		//однократное выполнение при длительном нажатии
+		{
+			_LED1(1);
+			//initT1(0x05, 0);		//запускаем таймер длительности нажатия
+			REPRESSBTN1 = 0;
+		}
+		if (cntT1 > ONESEC && INITtab < 3)		//подтверждение запуска инициализации при удержании кнопки примерно 1 сек
+		{
+			//cntT1++; //чтобы не зашлю сюда повторно в цикле
+			INITtab = 3;	//установка параметра для инициализации табло
+			display_7code(0x08, 0x08, 0x08, 0x08);
+			_flash_LED1(3, 200);
+		}
+		if (cntT1 > ONESEC * 10)		//слишком длительное нажатие (например при замыкании из-за влаги)
+		{
+			INITtab = 0;	//пропуcтить инициализацию при превышении времени удержания кнопки
+			cntT1 = 0;
+			_flash_LED1(10, 100);
+			break;				//выход из цикла и запуск работы табло
+		}
+		_delay_ms(10); //без этой задержки не выходит из цикла при отпускании кнопки PRESSBTN, возможно из-за оптимизации кода компилятором
+	}
+	REPRESSBTN1=1;
+	_LED1(0);
+	cntT1 = 0;
+	//выполнить инициализацию - определение номера табло Ntab
+	while(INITtab)
+	{
+		//при нажатии BTN1 инкремент Ntab
+		if (PRESSBTN1)
+		{
+			if (REPRESSBTN1)
+			{
+				_flash_LED1(1, 20);
+				REPRESSBTN1 = 0;
+				WRITEEENTAB = 1;
+				if (Ntab < MAXNTAB)
+				{
+					Ntab++;	//максимальный номер табло MAXNTAB (12)
+				}
+				else
+				{
+					Ntab = 0;
+				}
+				display_dnum(Ntab);
+				INITtab = 3;		//сброс выхода из инициализации
+				cntT1 = 0; TCNT1 = 0;		//сброс счетчика Т1
+			}
+		}
+		else REPRESSBTN1=1;
+		
+		//индикация номера табло и отсчет завершения инициализации
+		if (cntT1 >= ONESEC * 3)
+		{
+			if (Ntab) _flash_LED1(Ntab, 200);
+			else _flash_LED1(2, 30);
+			INITtab--;			//завершение инициализации по обнулении параметра INITIALIZATION
+            cntT1 = 0;          //сброс счетчика Т1
+			TADR = TADR0 + Ntab;
+			display_dnum(TADR);
+		}
+	}
+	//при завершении инициализации запись в ЕЕ номера табло
+	if (WRITEEENTAB) {
+		TADR = TADR0 + Ntab;
+		WRITEEENTAB=0;
+		cli();
+		eeprom_write_byte(EETab,Ntab);
+		eeprom_write_byte(EETab+1,TADR);
+		sei();
+	}
+	
+	Initialize();
+	_delay_ms(500);		//отображение адреса табло 500мс
+}
 
 //Задаем количество табло по нажатию кнопки с ИК пульта
 void SetCountTabs(uint8_t func)
@@ -1064,11 +1067,11 @@ void SetSettingsFromIrControl(uint8_t func)
 			//когда отловили именно нажатие кнопки текс на пульте (код 42) то посылаем в функцию именно индекс этого символа в массиве ABCD_T
 			//потому что в массив Digit[] записываются именно индексы соответствующие массиву ABCD_T, а далее вызывается функция display_10code_point
 			//которая отображает уже символы из массива ABCD_T по индексу
-			DigitButtonClickProgMode(DASHCODE); 
+			DigitButtonClickProgMode(DASHCODE);
 			break;
 		}
 		case RC5TVFORMAT: {
-			DigitButtonClickProgMode(SYMB_SPACEINDX);//вывели на экран команду С1 - что мы в режиме программирования); 
+			DigitButtonClickProgMode(SYMB_SPACEINDX);//вывели на экран команду С1 - что мы в режиме программирования);
 			break;
 		}
 		
@@ -1114,7 +1117,7 @@ void ColorButtonsClick(uint8_t buttonCode)
 	if (maskDegVal & (1 << buttonCode)) {
 		BITCLEAR(maskDegVal, buttonCode);
 	}
-	else { 
+	else {
 		BITSET(maskDegVal, buttonCode);
 	}
 	display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], maskDegVal);	//прямое отображение
@@ -1236,6 +1239,7 @@ void IrControlButtonClick(uint8_t func)
 			isSettingsModeOver = 0; // флаг что ввод еще не окончен
 			ADCENABLE = 0; //Зарпещаем измерение датчика освещенности пока находимся в режиме конфигурирования
 			DoBlinking(1); //поморгали ведущим табло в течении 3 секунд
+			cntExitProgMode = cntT1 + (ONEMIN * 5);
 			break;
 		}
 		//нажатие кнопки Vol+
@@ -1278,6 +1282,7 @@ void RCommand (uint8_t func, uint8_t _isSettingsMode) {
 
 void DoBlinking(uint8_t _nTab) {
 	for (uint8_t i = 0; i < 3; i++) {
+		wdt_enable(WDTO_2S); //вочдог таймер на 2 секунды, если зависли то хардресет (не забываем про фьюзы)
 		if (_nTab == 1) set_Bright(BriValues[0], 5); //яркость текущего табло
 		
 		TxDATA(TADR0 + _nTab, BRIGHT, BriValues[0], TADR0 + _nTab, BRIGHT, BriValues[0]);
@@ -1291,11 +1296,11 @@ void DoBlinking(uint8_t _nTab) {
 }
 
 void DoBlinkingAllTabs() {
-	for (uint8_t i = 0; i < 3; i++) {
+	for (uint8_t i = 0; i < 4; i++) {
 		set_Bright(BriValues[0], 4); //яркость всех табло
-		_delay_ms(200);
+		_delay_ms(100);
 		set_Bright(BriValues[11], 4); //яркость всех табло
-		_delay_ms(200);
+		_delay_ms(100);
 	}
 }
 
