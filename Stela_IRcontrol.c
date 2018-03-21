@@ -37,7 +37,7 @@ CountDigitButtonClick - счетчик нажатия цифровых кноп�
 #include "rc5_german.h"
 #include "ADC_lib.h"
 #include "usart.h"
-#include "Ind_lib_v2.1.h"
+#include "Ind_lib_v2.2.h"
 
 #define BIT(x) 			(1 << (x))
 #define SETBITS(x,y) 	((x) |= (y))
