@@ -499,7 +499,7 @@ void _UPDATEDATA(void)
 	digit_sort(2,3,0,1);	//IM-49
 	// digit_sort(3,2,1,0);	//DLD_0.6
 	//установка режима поразрядной индикации
-	set_PWC(3);
+	set_PWC(4);
 	
 	j = 0; it1 = 0;
 	
