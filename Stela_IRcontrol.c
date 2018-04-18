@@ -995,7 +995,6 @@ void setDeviceType(uint8_t irCode) {
 			setPinCodeManage(irCode); //обрабатываем нажатие ввода пинкода
 			break;
 		case RC5EXIT:
-		default:
 			ExitButtonClickProgMode();		//запуск процедуры выхода из режима программирования
 			break;
 	}
@@ -1060,7 +1059,11 @@ void setPinCodeManage(uint8_t bCode) {
 		stelaTabPosition = bCode;
 		display_7code(0, ABCD_T[10], ABCD_T[stelaTabPosition], ABCD_T[10]); //вывели параметр который сменили
 	}
+	else if (isSettingsMode == SETPRISEMODE || isSettingsMode == SETTABCOUNTMODE) { //исключаем ложный выход в режимах мастера
+		return;
+	}
 	else ExitButtonClickProgMode(); //если на пульте нажали кнопку отличную от последовательности входа в режим выбора состояния платы то выходим (info-menu-pin-slavemaster)
+		
 }
 
 //Алгоритм установки адреса платы кнопкой на самой плате - для настройки порядка табло на стеле
@@ -1388,14 +1391,14 @@ void IrControlButtonClick(uint8_t func)
 void RCommand (uint8_t func, uint8_t _isSettingsMode) {
 	_flash_LED1(1, 30); //Моргнцть один раз что команда принята с пульта
 	//если мы в режиме настроек то ждем ввод количества табло и выходим из этого режима
-	if (_isSettingsMode == 1) {
+	if (_isSettingsMode == SETTABCOUNTMODE) {
 		SetCountTabs(func); //Задаем количество табло по нажатию кнопки с ИК пульта
 	}
-	else if (_isSettingsMode == 0) {
+	else if (_isSettingsMode == DEFAULTMODE) {
 		//обработчик нажатия кнопки на ИК пульте
 		IrControlButtonClick(func);
 	}
-	else if (_isSettingsMode == 2) {
+	else if (_isSettingsMode == SETPRISEMODE) {
 		//Задаем значения на выбранном табло в режиме настроек или же выбираем следующее табло при повторном нажатии на Power
 		SetSettingsFromIrControl(func);
 	}
