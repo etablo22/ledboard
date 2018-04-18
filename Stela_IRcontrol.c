@@ -22,8 +22,6 @@ CountDigitButtonClick - счетчик нажатия цифровых кноп�
 смещение курсора при вводе цены при нажатии цифровых кнопок: CountDigitButtonClick++;
 ввод значений в массив DigTmp[CountDigitButtonClick]=RC5DIG_num
 код в процедуре case RC5DIG0: {...} надо вынести в функцию
-
-
 */
 
 
@@ -129,6 +127,16 @@ uint16_t const LUM4 = 620;
 #define RC5MENU			63
 #define RC5TVFORMAT		41
 
+const uint8_t DEFAULTMODE = 0, //режим работы платы по умолчанию
+			  SETTABCOUNTMODE = 1, //режим установки количества табло на стеле
+			  SETPRISEMODE = 2, //режим установки цены на табло
+			  INFOMODEADDR = 3, //режим установки работы платы слэйв-мастер
+			  INFOMODEDEVSTATE = 4, //режим установки работы платы слэйв-мастер
+			  SETPINCODEMODE = 5, //режим проверки ввода пин кода для установки слэйв-мастер
+			  SETMASTERSLAVEMODE = 6, //режим установки работы платы в состояние слэйв или масте
+			  INFOMODESETADDR = 7; //режим установки работы платы в состояние слэйв или масте
+uint8_t subMenuItem = 0; //временная переменная для хранения пункта меню сервисной настройки
+uint8_t isMasterDevice = 0; //флаг для платы - мастер или слэйв
 uint8_t maskDegVal = 0x0F; //значение маски для включения разрядов
 const uint8_t SHIFTYELLOBUTTON = 3; //значение на которое сдвигаем разряд маски для включения точки
 const uint8_t SHIFTBLUEBUTTON = 1;//значение на которое сдвигаем разряд маски для включения ЭКТО
@@ -144,25 +152,32 @@ uint16_t j = 0, it1 = 0;
 //cntADCSTART - таймер измерений освещенности через АЦП
 //cntExitProgMode - таймер автоматического выхода из режима редактирования
 //TxRxBufCleanPeriod - таймер очистки буферов приема и передачи UART
+uint32_t cntBlinkTimer = 0; //таймер цикла для бесконечной моргалки
+uint8_t isBlinked = 0; //флаг что табло уже моргнуло
 uint32_t cntT1 = 0, cntTabloUpdate, cntADCSTART, cntExitProgMode, TxRxBufCleanPeriod = 3600000;		//cntT1 - глобальный таймер-счетчик с периодом 1 мс
-uint32_t const ONESEC = 1000, ONEMIN = 60000, ONEDAY = 86400000;
+uint32_t const MILLIS_500 = 500, ONESEC = 1000, ONEMIN = 60000, ONEDAY = 86400000;
 uint32_t const cntMaxPeriod = 3800000000;		//максимальное значение таймер-счетчика с запасом примерно 10 суток
 uint8_t dispcounter, OCRtest, cntT0;
 uint8_t cnt_btn0, cnt_btn1;
 int8_t TestCNT, INITtab = 0;
 
-uint8_t Ntab,TADR, qtTab, tabUP = 1;		//tabUP - изменяемый флаг направления перехода между табло при редактировании
+uint8_t editNtab, TADR, qtTab, tabUP = 1;		//tabUP - изменяемый флаг направления перехода между табло при редактировании
+												//editNtab - номер редактируемого табло,
 
-uint8_t EEMEM EETab[3] = {1, 101, 5};		//Ntab - номер табло, TADR - адрес табло, qtTab - количество табло
+uint8_t stelaTabPosition = 0; //позиция текущего табло на стеле
+uint8_t EEMEM EETab[3] = {101, 5, 0};		
+//TADR - адрес табло,
+//qtTab - количество табло,
+//isMasterDevice - плата управления мастер или слэйв
 
 uint8_t isSettingsMode = 0; //флаг что мы находимся в режиме настроек
-uint8_t isSettingsModeOver = 0; //флаг выхода из режима настроек
 uint8_t CountDigitButtonClick = 0; //флаг первичного нажатия на клавишу цифры на ИК пульте (для обнуления текущего выбранного табло)
 
 uint8_t Digit[4]={5, 6, 7, 8}, PointMask=0x0F, DigTmp[4], nDig;
 uint8_t EEMEM EEDigit[4] = {0, 0, 0, 0},
 EEDsort[5] = {0, 1, 2, 3, 0x0F},
-EEdata[5] = {1, 255, 0, 0, 101};
+EEdata[5] = {1, 255, 0, 0, 101},
+EEDevPinCode[4] = {0, 0, 0, 1}; //пин код для платы (мак адрес)
 
 uint8_t EEMEM EEBriData[3] = {5, 95, 250}; //уровень яркости {ночной,средний, дневной}
 
@@ -175,6 +190,12 @@ BriStep = 0;
 //-------------------------------0-----1-----2-----3-----4-----5-----6-----7-----8------9--minus--null---^C--
 uint8_t ABCD_T [MAXDIGNUMBER]= {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x40, 0x00, 0x63};
 #define SYMB_C	0x39 //символ С (аббривиатура команда)
+#define SYMB_I	0x30 //символ С (аббривиатура команда)
+#define SYMB_n	0x54 //символ С (аббривиатура команда)
+#define SYMB_F	0x71 //символ С (аббривиатура команда)
+#define SYMB_o	0x5c //символ С (аббривиатура команда)
+#define SYMB_P	0x73 //символ С (аббривиатура команда)
+#define SYMB_i	0x10 //символ С (аббривиатура команда)
 
 
 //EEdata - 4Б: данные для настройки табло
@@ -195,24 +216,24 @@ extern uint16_t v_ADC, adc_counter;
 
 uint8_t hour=12, min=0, sec=0;
 
-uint8_t _CONVERT_pult_code(uint8_t code)
-{
-	switch (code)
-	{
-		case 222:	return 0; break;
-		case 24:	return 1; break;
-		case 205:	return 2; break;
-		case 93:	return 3; break;
-		case 27:	return 4; break;
-		case 87:	return 5; break;
-		case 215:	return 6; break;
-		case 28:	return 7; break;
-		case 223:	return 8; break;
-		case 95:	return 9; break;
-		case 1:		return 10; break;
-		default:	return 11; break;
-	}
-}
+// uint8_t _CONVERT_pult_code(uint8_t code)
+// {
+// 	switch (code)
+// 	{
+// 		case 222:	return 0; break;
+// 		case 24:	return 1; break;
+// 		case 205:	return 2; break;
+// 		case 93:	return 3; break;
+// 		case 27:	return 4; break;
+// 		case 87:	return 5; break;
+// 		case 215:	return 6; break;
+// 		case 28:	return 7; break;
+// 		case 223:	return 8; break;
+// 		case 95:	return 9; break;
+// 		case 1:		return 10; break;
+// 		default:	return 11; break;
+// 	}
+// }
 
 uint8_t _ascii2dec(uint8_t code)
 {
@@ -232,39 +253,39 @@ uint8_t _ascii2dec(uint8_t code)
 		default:		return 11; break;
 	}
 }
-
-uint8_t _ABCD2dec(uint8_t code)
-{
-	switch (code)
-	{
-		case 0x3F:		return 0; break;
-		case 0x06:		return 1; break;
-		case 0x5B:		return 2; break;
-		case 0x4F:		return 3; break;
-		case 0x66:		return 4; break;
-		case 0x6D:		return 5; break;
-		case 0x7D:		return 6; break;
-		case 0x07:		return 7; break;
-		case 0x7F:		return 8; break;
-		case 0x6F:		return 9; break;
-		case 0x40:		return 10; break;
-		case 0x00:		return 11; break;
-		case 0x63:		return 12; break;
-		default:		return 0x11; break;
-	}
-}
+//
+// uint8_t _ABCD2dec(uint8_t code)
+// {
+// 	switch (code)
+// 	{
+// 		case 0x3F:		return 0; break;
+// 		case 0x06:		return 1; break;
+// 		case 0x5B:		return 2; break;
+// 		case 0x4F:		return 3; break;
+// 		case 0x66:		return 4; break;
+// 		case 0x6D:		return 5; break;
+// 		case 0x7D:		return 6; break;
+// 		case 0x07:		return 7; break;
+// 		case 0x7F:		return 8; break;
+// 		case 0x6F:		return 9; break;
+// 		case 0x40:		return 10; break;
+// 		case 0x00:		return 11; break;
+// 		case 0x63:		return 12; break;
+// 		default:		return 0x11; break;
+// 	}
+// }
 
 //конвертер DEC  -> BCD
-char _dec2bcd(char num)
-{
-	return ((num / 10 * 16) + (num % 10));
-}
-
-// Convert Binary Coded Decimal (BCD) to Decimal
-int16_t _bcd2dec(int16_t num)
-{
-	return ((num / 16 * 10) + (num % 16));
-}
+// char _dec2bcd(char num)
+// {
+// 	return ((num / 10 * 16) + (num % 10));
+// }
+//
+// // Convert Binary Coded Decimal (BCD) to Decimal
+// int16_t _bcd2dec(int16_t num)
+// {
+// 	return ((num / 16 * 10) + (num % 16));
+// }
 
 //проверка и корректировка данных для табло
 uint8_t _CORRECT(uint8_t code, uint8_t digit, int8_t codetype)
@@ -278,22 +299,22 @@ uint8_t _CORRECT(uint8_t code, uint8_t digit, int8_t codetype)
 	//3: ABCD - код 7-сегментного индикатора
 	//4: Pult_code - кодировка пульта (Кузьмин П.В.)
 	switch (codetype) {
-		case 1: {
-			if ((tdata >= 0) && (tdata <= MAXDIGNUMBER)) code=tdata;
-			break;	//корректное значение цифры
-		}
-		case 2:	{
-			code = _ascii2dec(tdata);
-			break;
-		}								//преобразование из формата ASCII
-		case 3: {
-			code = _ABCD2dec(tdata);
-			break;
-		}								//преобразование из кода 7-сегм.
-		case 4: {
-			code = _CONVERT_pult_code(tdata);
-			break;
-		}						//преобразование из кода Pult_code
+		// 		case 1: {
+		// 			if ((tdata >= 0) && (tdata <= MAXDIGNUMBER)) code=tdata;
+		// 			break;	//корректное значение цифры
+		// 		}
+		// 		case 2:	{
+		// 			code = _ascii2dec(tdata);
+		// 			break;
+		// 		}								//преобразование из формата ASCII
+		// 		case 3: {
+		// 			code = _ABCD2dec(tdata);
+		// 			break;
+		// 		}								//преобразование из кода 7-сегм.
+		// 		case 4: {
+		// 			code = _CONVERT_pult_code(tdata);
+		// 			break;
+		// 		}						//преобразование из кода Pult_code
 		default: {
 			if ((tdata >= 0) && (tdata <= MAXDIGNUMBER)) code=tdata;				//корректное значение цифры
 			else if ((tdata > 0x29) && (tdata < 0x40)) code = _ascii2dec(tdata);			//преобразование из формата ASCII
@@ -521,7 +542,7 @@ void set_Bright(uint16_t val, uint8_t param)
 	BriStep = _getBriStep(BriLevels[BriMode]);
 }
 
-//Передача данных по проводному пульту (интерфейс 485)
+//Передача данных по интерфейсу 485
 void COMMANDS(uint8_t func) {
 	switch (func) {
 		//установка яркости табло
@@ -573,52 +594,56 @@ void COMMANDS(uint8_t func) {
 				if (USART_GetRxCount() == 0) _delay_ms(200);
 			}
 
-			WRITEEEDIG = 1;	//записать значение цены в ЕЕ
+			//WRITEEEDIG = 1;	//записать значение цены в ЕЕ
 			cntTabloUpdate = 1;	 	//обновить инф. на табло
 			_LED1(0);
 			break;
 		}
+		case RXWRITEEE: {
+			WRITEEEDIG = 1;
+			break;
+		}
 		//установка режима работы табло - заблокировано
 		//показать номер режима работы
-		case SETMODE: {
-			_LED1(1);
-			if (USART_GetRxCount() == 0) _delay_ms(200);
-			
-			if (USART_GetRxCount())	{
-				UARTdata = USART_GetChar();		//чтение значения режима работы
-			}
-			display_dnum(mode);					//показать номер режима
-			TCNT1 = 0;
-			cntTabloUpdate = 0;					//задержать обновление табло
-			_LED1(0);
-			break;
-		}
-		//отобразить номер табло (установка заблокирована)
-		case SETTADR: {
-			if (USART_GetRxCount() == 0) _delay_ms(200);
-			
-			if (USART_GetRxCount())	{
-				UARTdata = USART_GetChar();		//чтение адреса
-			}
-			display_dnum(TADR);					//показать адрес табло
-			TCNT1 = 0;
-			cntTabloUpdate = 0;					//задержать обновление табло
-			break;
-		}
-		//программный сброс
-		case RESET: {
-			_LED1(1);
-			
-			if (USART_GetRxCount() == 0) _delay_ms(200);
-			
-			if (USART_GetRxCount())	{
-				UARTdata = USART_GetChar();		//чтение оператора команды
-				
-				if (UARTdata == 1) SOFTRESET = 1;
-			}
-			_LED1(0);
-			break;
-		}
+		// 		case SETMODE: {
+		// 			_LED1(1);
+		// 			if (USART_GetRxCount() == 0) _delay_ms(200);
+		//
+		// 			if (USART_GetRxCount())	{
+		// 				UARTdata = USART_GetChar();		//чтение значения режима работы
+		// 			}
+		// 			display_dnum(mode);					//показать номер режима
+		// 			TCNT1 = 0;
+		// 			cntTabloUpdate = 0;					//задержать обновление табло
+		// 			_LED1(0);
+		// 			break;
+		// 		}
+		// 		//отобразить номер табло (установка заблокирована)
+		// 		case SETTADR: {
+		// 			if (USART_GetRxCount() == 0) _delay_ms(200);
+		//
+		// 			if (USART_GetRxCount())	{
+		// 				UARTdata = USART_GetChar();		//чтение адреса
+		// 			}
+		// 			display_dnum(TADR);					//показать адрес табло
+		// 			TCNT1 = 0;
+		// 			cntTabloUpdate = 0;					//задержать обновление табло
+		// 			break;
+		// 		}
+		// 		//программный сброс
+		// 		case RESET: {
+		// 			_LED1(1);
+		//
+		// 			if (USART_GetRxCount() == 0) _delay_ms(200);
+		//
+		// 			if (USART_GetRxCount())	{
+		// 				UARTdata = USART_GetChar();		//чтение оператора команды
+		//
+		// 				if (UARTdata == 1) SOFTRESET = 1;
+		// 			}
+		// 			_LED1(0);
+		// 			break;
+		// 		}
 	}
 }
 
@@ -626,8 +651,8 @@ uint8_t USART_handle(void)
 {
 	uint8_t CORRECT=1;
 	getADR = USART_GetChar();	//чтение байта 1: адрес
-	if (getADR!=BROADCAST) {	//если не широковещательный
-		if (getADR==TADR) {		//сравнение с адресом контроллера
+	if (getADR != BROADCAST) {	//если не широковещательный
+		if (getADR == TADR) {		//сравнение с адресом контроллера
 			//выполнение при совпадении адреса
 			if (USART_GetRxCount()) UARTcommand = USART_GetChar();	//чтение адресной команды
 			else {
@@ -661,8 +686,6 @@ void ADCluxmeter(uint8_t luxchannel)
 		//отображение значения яркости для тестов---------------------
 		//#ifdef DEBUG
 		//{
-		////PrintStringWithValToSerial("LOW v_ADC = ", (uint8_t) v_ADC);
-		////PrintStringWithValToSerial("HIGH v_ADC = ", (uint8_t) (v_ADC>>8));
 		//display_dnum(v_ADC); //отображение значения яркости
 		//cntTabloUpdate = cntT1 + 1000; //отображаем значение яркости 1 секунду
 		//}
@@ -675,48 +698,48 @@ void ADCluxmeter(uint8_t luxchannel)
 			preBriMode = BriMode;
 			TXDATAEN |= 0x01;
 		}
-		//				else TXDATAEN &=~(0x01);	//запрещение TX при сохранении режима яркости
 		adc_counter = 0;
 		v_ADC = 0;
 		_flash_LED1(3, 20);
 	}
 }
 
-void _SOFTRESET(void)
-{
-	//	WDTCSR=0x00;
-	
-	DDRLED |= _BV(LED1);//|_BV(LED2);
-	_flash_LED1(3,100);
-
-	mode=0;
-
-	cli();
-	
-	for (j = 0; j < 4; j++)
-	{
-		eeprom_write_byte(EEDigit + j, j + 1);
-	}
-	for (j = 0; j < 4; j++)
-	{
-		Digit[j] = eeprom_read_byte(EEDigit + j);
-	}
-	
-	sei();
-	display_10code(Digit[0], Digit[1], Digit[2], Digit[3]);
-}
+// void _SOFTRESET(void)
+// {
+// 	//	WDTCSR=0x00;
+//
+// 	DDRLED |= _BV(LED1);//|_BV(LED2);
+// 	_flash_LED1(3,100);
+//
+// 	mode=0;
+//
+// 	cli();
+//
+// 	for (j = 0; j < 4; j++)
+// 	{
+// 		eeprom_write_byte(EEDigit + j, j + 1);
+// 	}
+// 	for (j = 0; j < 4; j++)
+// 	{
+// 		Digit[j] = eeprom_read_byte(EEDigit + j);
+// 	}
+//
+// 	sei();
+// 	display_10code(Digit[0], Digit[1], Digit[2], Digit[3]);
+// }
 
 
 //установка начальных значений переменных
 void Initialize(void)
 {
 	cli();
-	//Ntab = eeprom_read_byte(EETab);		//значение номера табло
-	Ntab = 1;		//значение номера табло
-	TADR = eeprom_read_byte(EETab + 1);		//значение адреса табло
-	qtTab = eeprom_read_byte(EETab + 2);		//значение количества табло
+	editNtab = 1;		//значение номера табло
+	TADR = eeprom_read_byte(EETab);		//значение адреса табло
+	qtTab = eeprom_read_byte(EETab + 1);		//значение количества табло
+	isMasterDevice = eeprom_read_byte(EETab + 2); //является ли плата мастер или слэйв
+	stelaTabPosition = TADR - TADR0; //номер табло на стеле по порядку
 
-	DDRLED |= (1 << LED1);//|_BV(LED2);
+	DDRLED |= (1 << LED1);
 	
 	digit_sort(2, 3, 0, 1); //сортировка разрядов табло
 	set_PWC(4); //установка режима поразрядной индикации
@@ -777,22 +800,68 @@ int main(void)
 	{
 		wdt_enable(WDTO_2S); //вочдог таймер на 2 секунды, если зависли то хардресет (не забываем про фьюзы)
 		//программный сброс
-		if (SOFTRESET) {
-			if (WDTCR & (1 << WDE)) {
-				while(1);
+		// 		if (SOFTRESET) {
+		// 			if (WDTCR & (1 << WDE)) {
+		// 				while(1);
+		// 			}
+		// 			else {
+		// 				Initialize();
+		// 				_SOFTRESET();
+		// 			}
+		// 		}
+		
+		if (isMasterDevice) 
+		{
+			//запуск измерений АЦП
+			if ((cntT1 > cntADCSTART) && ADCENABLE)
+			{
+				//PrintStringToSerial("INTO ADC FINE!");
+				cntADCSTART=cntT1 + 20;	//примерно с периодом 0.02 сек
+				ADCluxmeter(ADCLUXCH); //измерение и отображение значения яркости
 			}
-			else {
-				Initialize();
-				_SOFTRESET();
+
+			//чтение значения яркости из ЕЕ в ОЗУ
+			if (READEEBRI) {
+				_LED1(1);
+				READEEBRI = 0;
+				cli();
+				//считываем значения трех уровней яркости из ЕЕ
+				BriLevels[0] = eeprom_read_byte(EEBriData); //ночная яркость
+				BriLevels[1] = eeprom_read_byte(EEBriData + 1); //яркость утром и вечером
+				BriLevels[2] = eeprom_read_byte(EEBriData + 2); //дневная яркость
+				sei();
+				set_Bright(1, 0);
+				TXBRIDATA = 1;
+				_LED1(0);
+			}
+			
+			//отправка широковещ-й команды установки яркости на табло
+			//фильтр с проверкой двух младших битов
+			if (TXBRIDATA && (TXDATAEN & 0x01) && (TXDATAEN & 0x02)) {
+				//если глобально разрешена передача по RS485
+				TXBRIDATA = 0;
+				TxDATA(BROADCAST, BRIGHT, BriLevels[BriMode], BROADCAST, BRIGHT, BriLevels[BriMode]);
+			}
+			
+			//запись значения яркости в ЕЕ
+			if (WRITEEEBRI && (WREEN & 0x03)) {
+				_LED1(1);
+				WRITEEEBRI = 0;
+				CHBRI = 0;
+				cli();
+				eeprom_write_byte(EEBriData + BriMode, BriLevels[BriMode]); //сохранение яркости только для текущего режима
+				sei();
+				_LED1(0);
 			}
 		}
 		
 		//проверка переполнения переменных, использующих таймер-счетчик
 		if (cntT1 > cntMaxPeriod)
 		{
-			cntADCSTART = cntADCSTART - cntT1;				//корректировка таймера
-			cntTabloUpdate = cntTabloUpdate - cntT1;		//
-			cntExitProgMode = cntExitProgMode - cntT1;		//
+			cntADCSTART -= cntT1;				//корректировка таймера
+			cntTabloUpdate -= cntT1;		//
+			cntExitProgMode -= cntT1;		//
+			cntBlinkTimer -=  cntT1;
 			cntT1 = 0;
 		}
 		
@@ -804,7 +873,7 @@ int main(void)
 		}
 		
 		//обновление данных на табло по достижению счетчика cntT1 + TabloUpdatePeriod
-		if (cntT1 > cntTabloUpdate && isSettingsMode == 0) {
+		if (cntT1 > cntTabloUpdate && isSettingsMode == DEFAULTMODE) {
 			_LED1(1);
 			cntTabloUpdate = cntT1 + TabloUpdatePeriod;
 			
@@ -832,42 +901,14 @@ int main(void)
 			_LED1(0);
 		}
 		
-		//запуск измерений АЦП
-		if ((cntT1 > cntADCSTART) && ADCENABLE)
-		{
-			//PrintStringToSerial("INTO ADC FINE!");
-			cntADCSTART=cntT1 + 20;	//примерно с периодом 0.02 сек
-			ADCluxmeter(ADCLUXCH); //измерение и отображение значения яркости
-		}
-
-		//чтение значения яркости из ЕЕ в ОЗУ
-		if (READEEBRI) {
-			_LED1(1);
-			READEEBRI = 0;
-			cli();
-			//считываем значения трех уровней яркости из ЕЕ
-			BriLevels[0] = eeprom_read_byte(EEBriData); //ночная яркость
-			BriLevels[1] = eeprom_read_byte(EEBriData + 1); //яркость утром и вечером
-			BriLevels[2] = eeprom_read_byte(EEBriData + 2); //дневная яркость
-			sei();
-			set_Bright(1, 0);
-			TXBRIDATA = 1;
-			_LED1(0);
-		}
-		
-		//отправка широковещ-й команды установки яркости на табло
-		//фильтр с проверкой двух младших битов
-		if (TXBRIDATA && (TXDATAEN & 0x01) && (TXDATAEN & 0x02)) {
-			//если глобально разрешена передача по RS485
-			TXBRIDATA = 0;
-			TxDATA(BROADCAST, BRIGHT, BriLevels[BriMode], BROADCAST, BRIGHT, BriLevels[BriMode]);
-		}
-
-		//запись данных на всех табло в ЕЕ
+		//запись данных на текущем табло в ЕЕ если по 485 пришла команда на изменение цены
 		if (WRITEEEDIG && (WREEN & 0x01)) {
 			_LED1(1);
 			WRITEEEDIG = 0;
-			EepromWritePrice(BROADCAST - TADR0); //широковещательная отправка на все табло для сохранения в ее
+			cli();
+			for (j = 0; j < 4; j++)
+			eeprom_write_byte(EEDigit + j, Digit[j]);
+			sei();
 			_LED1(0);
 		}
 		
@@ -882,17 +923,6 @@ int main(void)
 			_LED1(0);
 		}
 		
-		//запись значения яркости в ЕЕ
-		if (WRITEEEBRI && (WREEN & 0x03)) {
-			_LED1(1);
-			WRITEEEBRI = 0;
-			CHBRI = 0;
-			cli();
-			eeprom_write_byte(EEBriData + BriMode, BriLevels[BriMode]); //сохранение яркости только для текущего режима
-			sei();
-			_LED1(0);
-		}
-
 		if (USART_GetRxCount()) {	//проверка наличия данных в буфере приема UART
 			_LED1(1);
 			if (USART_handle()) {
@@ -901,10 +931,25 @@ int main(void)
 			_LED1(0);
 		}//UART
 
-		//таймер выхода из режима редактирования
+		//таймер выхода из режима isSettingsMode == 1 или isSettingsMode == 2 и т.д
 		if (isSettingsMode && (cntT1 > cntExitProgMode))
 		{
 			ExitButtonClickProgMode();		//запуск процедуры выхода из режима программирования
+		}
+		
+		//бесконечная моргалка для табло (период 500 мс)
+		if ((isSettingsMode == SETMASTERSLAVEMODE || 
+			 isSettingsMode == SETPINCODEMODE ||
+			 isSettingsMode == INFOMODESETADDR) && (cntT1 > cntBlinkTimer + MILLIS_500)) {
+			if (isBlinked == 0) {
+				set_Bright(BriValues[3], 5); //яркость текущего табло
+				isBlinked = 1;
+			}
+			else {
+				set_Bright(BriValues[11], 5); //яркость текущего табло
+				isBlinked = 0;
+			}
+			cntBlinkTimer = cntT1;
 		}
 		
 		//обработчик команд, поступающих по ИК-
@@ -912,27 +957,114 @@ int main(void)
 		{
 			j = rc5_data;
 			Rfunc = ((j & 0x3F)|(~j >> 7 & 0x40)); //Выделяем только код команды
-			//		USART_SendStr("---rc5_data OK");
-			//		USART_SendStr("------ TRY RCommand");
-			RCommand(Rfunc, isSettingsMode);
-			//если мы верно ввели количество табло в настройках то у нас isSettingsMode сохранится = 1 и мы сохраняемся в еепром + подтверждаем верный ввод еще одним морганием
-			if (isSettingsMode == 1 && isSettingsModeOver == 1) {
-				//PrintStringToSerial(" if isSettingsMode == 1 && isSettingsModeOver == 1 OK ");
-				eeprom_write_byte(EETab + 2, qtTab);
-				display_7code(0x39, ABCD_T[2], ABCD_T[10], ABCD_T[qtTab]); //вывели на экран новое значение количества табло
-				DoBlinking(1); //поморгали ведущим табло в течении 3 секунд
-				ExitButtonClickProgMode(); //Вернули все флаги на место
-				//PrintStringToSerial(" TRY DoBlinkingAllTabs() ");
+			
+			//если плата в режиме мастера то ловим пульт и обрабатываем команды под мастера
+			if (isMasterDevice)	{
+				RCommand(Rfunc, isSettingsMode);
 			}
+			
+			//настройка редима работы платы устанавливается пультом и на слэйве и на мастере
+			setDeviceType(Rfunc); //Устанавливаем режим работы платы (мастер или слэйв)
 			rc5_data=0;
+			_delay_ms(500);
 		}
-		
 	}//while(1)
-
 }//main()
 
+//НАстройка режима работы платы с пульта (мастер или слэйв)
+void setDeviceType(uint8_t irCode) {
+	switch(irCode) {
+		case RC5INFO:
+			ADCENABLE = 0; //Зарпещаем измерение датчика освещенности пока находимся в режиме конфигурирования
+			cntExitProgMode = cntT1 + (ONEMIN); //обновили счетчик выхода по таймеру из всех режимов пульта
+			infoModeManage(); //меню настройки контроллера - адрес и состояние слэйв-мастер
+			break;
+		case RC5MENU:
+			deviceTypeManage(); //обрабатываем нажатие меню
+			break;
+		case RC5DIG0:
+		case RC5DIG1:
+		case RC5DIG2:
+		case RC5DIG3:
+		case RC5DIG4:
+		case RC5DIG5:
+		case RC5DIG6:
+		case RC5DIG7:
+		case RC5DIG8:
+		case RC5DIG9:
+			setPinCodeManage(irCode); //обрабатываем нажатие ввода пинкода
+			break;
+		case RC5EXIT:
+		default:
+			ExitButtonClickProgMode();		//запуск процедуры выхода из режима программирования
+			break;
+	}
+}
+
+//меню настройки контроллера - адрес и состояние слэйв-мастер
+void infoModeManage() {
+	if (isSettingsMode == DEFAULTMODE || isSettingsMode == INFOMODEDEVSTATE) {
+		isSettingsMode = INFOMODEADDR; // перешли в режим ожидания ввода следующей команды
+		display_7code(0, ABCD_T[10], ABCD_T[stelaTabPosition], ABCD_T[10]); //вывели на экран номер табло по порядку в виде -1-
+	}
+	else if (isSettingsMode == INFOMODEADDR) {
+		isSettingsMode = INFOMODEDEVSTATE; // перешли в режим ожидания ввода следующей команды
+		display_7code(SYMB_P, 0, 0, ABCD_T[isMasterDevice]); //вывели на экран режим мастер-слэйв
+	}
+	subMenuItem = isSettingsMode;//сохранили подпункт сервисного меню
+}
+
+//обрабатываем нажатие меню в режиме конфигурирования платы под слэйв-мастер
+void deviceTypeManage() {
+	if (isSettingsMode == INFOMODEDEVSTATE || isSettingsMode == INFOMODEADDR) { //если была нажата кнопка инфо и мы в режиме инфо
+		for (uint8_t i = 0; i < 4; i++) {
+			DigTmp[i] = eeprom_read_byte(EEDevPinCode + i); //заполняем пинкод во временный массив
+		}
+		cntExitProgMode = cntT1 + (ONEMIN); //обновили счетчик выхода по таймеру из всех режимов пульта
+		display_7code(ABCD_T[DigTmp[0]], ABCD_T[DigTmp[1]], ABCD_T[DigTmp[2]], ABCD_T[DigTmp[3]]); //вывели пин код на экран
+		isSettingsMode = SETPINCODEMODE; //перешли в режим ввода пинкода
+	}
+}
+
+//проверка правильности ввода пин кода для конфигурирования платы под слэйв-мастер
+void setPinCodeManage(uint8_t bCode) {
+	cntExitProgMode = cntT1 + (ONEMIN); //обновили счетчик выхода по таймеру из всех режимов пульта
+	if (isSettingsMode == SETPINCODEMODE) {
+		//проверка на правильность ввода пин кода, если цифра неверная то уходим в стандартный режим
+		if (DigTmp[CountDigitButtonClick] == bCode) {
+			DigTmp[CountDigitButtonClick] = SYMB_SPACEINDX; //если правильно ввели цифру то зануляем ее чтобы убрать с экрана
+			set_Bright(BriValues[11], 5); //яркость текущего табло подтверждение ввода символа
+			display_7code(ABCD_T[DigTmp[0]], ABCD_T[DigTmp[1]], ABCD_T[DigTmp[2]], ABCD_T[DigTmp[3]]); //убираем с экрана правильно введенные цифры
+			} else {
+			ExitButtonClickProgMode();
+			return;
+		}
+		CountDigitButtonClick++;
+		if (CountDigitButtonClick > 3) { //если закончили ввод всех 4х цифр пин кода
+			if (subMenuItem == INFOMODEDEVSTATE) { //смотрим пункт меню в котором находимся - если хотим настраивать мастер-слэйв
+				isSettingsMode = SETMASTERSLAVEMODE; //переходим в режим настройки платы под слэйв-мастер
+				display_7code(SYMB_P, 0, 0, ABCD_T[isMasterDevice]); //вывели на экран текущий режим мастер-слэйв
+			}
+			else if (subMenuItem == INFOMODEADDR) { //если хотим настраивать порядок на стеле для текущей платы
+				isSettingsMode = INFOMODESETADDR;
+				display_7code(0, ABCD_T[10], ABCD_T[stelaTabPosition], ABCD_T[10]); //моргаем параметром который хотим сменить - порядок на стеле
+			}
+			return;
+		}
+	}
+	else if (isSettingsMode == SETMASTERSLAVEMODE && bCode < 2) { //тут отрабатываем нажатия на кнопки 0-1 для смены режима слэйв-мастер bCode < 2 - только цифры 0-1
+		isMasterDevice = bCode; //присвоили нажатую кнопку 0-1 режиму платы
+		display_7code(SYMB_P, 0, 0, ABCD_T[isMasterDevice]); //вывели на экран режим мастер-слэйв
+	}
+	else if (isSettingsMode == INFOMODESETADDR) {
+		stelaTabPosition = bCode;
+		display_7code(0, ABCD_T[10], ABCD_T[stelaTabPosition], ABCD_T[10]); //вывели параметр который сменили
+	}
+	else ExitButtonClickProgMode(); //если на пульте нажали кнопку отличную от последовательности входа в режим выбора состояния платы то выходим (info-menu-pin-slavemaster)
+}
+
+//Алгоритм установки адреса платы кнопкой на самой плате - для настройки порядка табло на стеле
 void setBoardAddr() {
-	
 	//initT1(0x00, 0);	//остановка таймера для исключения ложного срабатывания
 	cntT1 = 0;
 	REPRESSBTN1 = 1;
@@ -978,15 +1110,15 @@ void setBoardAddr() {
 				_flash_LED1(1, 20);
 				REPRESSBTN1 = 0;
 				WRITEEENTAB = 1;
-				if (Ntab < MAXNTAB)
+				if (editNtab < MAXNTAB)
 				{
-					Ntab++;	//максимальный номер табло MAXNTAB (12)
+					editNtab++;	//максимальный номер табло MAXNTAB (12)
 				}
 				else
 				{
-					Ntab = 0;
+					editNtab = 0;
 				}
-				display_dnum(Ntab);
+				display_dnum(editNtab);
 				INITtab = 3;		//сброс выхода из инициализации
 				cntT1 = 0; TCNT1 = 0;		//сброс счетчика Т1
 			}
@@ -996,21 +1128,20 @@ void setBoardAddr() {
 		//индикация номера табло и отсчет завершения инициализации
 		if (cntT1 >= ONESEC * 3)
 		{
-			if (Ntab) _flash_LED1(Ntab, 200);
+			if (editNtab) _flash_LED1(editNtab, 200);
 			else _flash_LED1(2, 30);
 			INITtab--;			//завершение инициализации по обнулении параметра INITIALIZATION
-            cntT1 = 0;          //сброс счетчика Т1
-			TADR = TADR0 + Ntab;
+			cntT1 = 0;          //сброс счетчика Т1
+			TADR = TADR0 + editNtab;
 			display_dnum(TADR);
 		}
 	}
 	//при завершении инициализации запись в ЕЕ номера табло
 	if (WRITEEENTAB) {
-		TADR = TADR0 + Ntab;
+		TADR = TADR0 + editNtab;
 		WRITEEENTAB=0;
 		cli();
-		eeprom_write_byte(EETab,Ntab);
-		eeprom_write_byte(EETab+1,TADR);
+		eeprom_write_byte(EETab, TADR);
 		sei();
 	}
 	
@@ -1032,8 +1163,7 @@ void SetCountTabs(uint8_t func)
 		case RC5DIG8:
 		case RC5DIG9: {
 			qtTab = func;
-			//PrintStringWithValToSerial(" ---SetCountTabs() OK    qtTab = ", qtTab);
-			isSettingsModeOver = 1; //поднимаем флаг что ввод окончен
+			ExitButtonClickProgMode(); //если неверно ввели то выходим из режима настроек
 			break;
 		}
 		default: {
@@ -1047,8 +1177,6 @@ void SetCountTabs(uint8_t func)
 //Задаем значения на выбранном табло в режиме редактирования или же выбираем следующее табло при повторном нажатии на Power или Ok
 void SetSettingsFromIrControl(uint8_t func)
 {
-	//PrintStringWithValToSerial(" ---SetSettingsFromIrControl() OK    KEY CODE = ", func);
-
 	switch (func) {
 		//нажатие кнопки Power повторно
 		case RC5POWER: {
@@ -1106,7 +1234,6 @@ void SetSettingsFromIrControl(uint8_t func)
 			break;
 		}
 		default: {
-			//PrintStringToSerial("PROGRAMMING MODE WRONG CODE");
 			break;
 		}
 	}
@@ -1126,21 +1253,17 @@ void ColorButtonsClick(uint8_t buttonCode)
 void PowerButtonClickProgMode()
 {
 	if (CountDigitButtonClick > 0) {
-		//PrintStringToSerial(" ------TRY EepromWritePrice()");
-		EepromWritePrice(Ntab); //сохранили цену табло в еепром если редактировали
+		EepromWritePrice(editNtab); //сохранили цену табло в еепром если редактировали
 	}
 	
-	Ntab++;
+	editNtab++;
 	
 	//проверка на превышение Ntab > qtTab
-	if (Ntab > qtTab) {
-		//PrintStringToSerial("Ntab > qtTab OK");
-		Ntab = 1; //тогда переключаемся снова на первое табло
+	if (editNtab > qtTab) {
+		editNtab = 1; //тогда переключаемся снова на первое табло
 	}
-	//PrintStringToSerial("DO BRIGHT all tabs OK");
 	set_Bright(BriValues[MIDDLE_BRIGHT], 4); //яркость всех табло
-	//PrintStringToSerial("DO Blinking curr tab OK");
-	DoBlinking(Ntab); //начинаем моргать текущим табло
+	DoBlinking(editNtab); //начинаем моргать текущим табло
 	CountDigitButtonClick = 0;
 }
 
@@ -1148,34 +1271,42 @@ void OkButtonClickProgMode()
 {
 	_flash_LED1(1, 30);
 	if (CountDigitButtonClick > 0) {
-		//PrintStringToSerial(" ------TRY EepromWritePrice()");
-		EepromWritePrice(Ntab); //сохранили цену табло в еепром  если редактировали
+		EepromWritePrice(editNtab); //сохранили цену табло в еепром  если редактировали
 	}
 	
-	Ntab--;
+	editNtab--;
 	
 	//проверка на Ntab < 1
-	if (Ntab < 1) {
-		Ntab = qtTab; //тогда присваиваем индекс последнего табло чтобы переключиться на него
+	if (editNtab < 1) {
+		editNtab = qtTab; //тогда присваиваем индекс последнего табло чтобы переключиться на него
 	}
 	
 	set_Bright(BriValues[MIDDLE_BRIGHT], 4); //яркость всех табло
-	DoBlinking(Ntab); //начинаем моргать текущим табло
+	DoBlinking(editNtab); //начинаем моргать текущим табло
 	CountDigitButtonClick = 0;
 }
 
 void ExitButtonClickProgMode()
 {
-	//PrintStringToSerial("EXIT EXIT EXIT");
-	isSettingsMode = 0;
+	//если мы верно ввели количество табло в настройках то у нас isSettingsMode сохранится = 1 и мы сохраняемся в еепром + подтверждаем верный ввод еще одним морганием
+	if (isSettingsMode == SETTABCOUNTMODE) {
+		eeprom_write_byte(EETab + 1, qtTab);
+		display_7code(0x39, ABCD_T[2], ABCD_T[10], ABCD_T[qtTab]); //вывели на экран новое значение количества табло
+		DoBlinking(1); //поморгали ведущим табло в течении 3 секунд
+	}
+	if (isSettingsMode == SETPRISEMODE && CountDigitButtonClick > 0) { //если режим для ввода цен
+		EepromWritePrice(editNtab); //сохранили цену табло в еепром  если редактировали
+	}
+	if (isSettingsMode == SETMASTERSLAVEMODE) {//если режим установки мастера-слэйа для платы
+		eeprom_write_byte(EETab + 2, isMasterDevice);
+	}
+	if (isSettingsMode == INFOMODESETADDR) {//если режим смены адреса табло (позиции на стеле)
+		eeprom_write_byte(EETab, stelaTabPosition + TADR0);
+	}
+	isSettingsMode = DEFAULTMODE;
 	ADCENABLE = 1;
 	READEEBRI = 1; //читаем яркость из ЕЕ
-	isSettingsModeOver = 0; //флаг окончания ввода количества табло
-	
-	if (CountDigitButtonClick > 0) {
-		//PrintStringToSerial(" ------TRY EepromWritePrice()");
-		EepromWritePrice(Ntab); //сохранили цену табло в еепром  если редактировали
-	}
+	CountDigitButtonClick = 0;
 }
 
 void DigitButtonClickProgMode(uint8_t buttonCode)
@@ -1198,7 +1329,7 @@ void DigitButtonClickProgMode(uint8_t buttonCode)
 		CountDigitButtonClick = 1;
 	}
 	//если редактируемое табло - текущее табло, то изменяем значения
-	if (TADR == (TADR0 + Ntab)) {
+	if (TADR == (TADR0 + editNtab)) {
 		Digit[0] = DigTmp[0];
 		Digit[1] = DigTmp[1];
 		Digit[2] = DigTmp[2];
@@ -1206,25 +1337,20 @@ void DigitButtonClickProgMode(uint8_t buttonCode)
 		display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], 0x0F);	//прямое отображение
 	}
 	//отправка новой цены на редактируемое табло
-	TxDATA(TADR0 + Ntab, RXTDATA, DigTmp[0], DigTmp[1], DigTmp[2], DigTmp[3]);
-	_delay_ms(300);
+	TxDATA(TADR0 + editNtab, RXTDATA, DigTmp[0], DigTmp[1], DigTmp[2], DigTmp[3]);
 }
 
 //обработчик нажатия кнопки на ИК пульте
 void IrControlButtonClick(uint8_t func)
 {
-	//PrintStringWithValToSerial("---IrControlButtonClick() OK   ButtonCode = ", func);
-	
 	switch (func) {
 		//нажатие кнопки Power
 		case RC5POWER:
 		case RC5OK: {
 			_flash_LED1(1, 30); //моргнули светодиодом на плате 1 раз с звдержкой 30мс
 			display_7code(SYMB_C, ABCD_T[1], 0, 0);//вывели на экран команду С1 - что мы в режиме программирования
-			//PrintStringToSerial("Button POWER OR OK CLICK OK");
-			//PrintStringToSerial("TRY ProgrammingModeButtonClick()");
-			Ntab = 1; //сброс номера табло
-			isSettingsMode = 2; //если нажали Power или OK то взводим флаг что мы в режиме редактирования текущего табло
+			editNtab = 1; //сброс номера табло
+			isSettingsMode = SETPRISEMODE; //если нажали Power или OK то взводим флаг что мы в режиме редактирования текущего табло
 			cntExitProgMode = cntT1 + (ONEMIN * 5);
 			CountDigitButtonClick = 0; //сброс нажатий на цифры
 			ADCENABLE = 0; //Зарпещаем измерение датчика освещенности пока находимся в режиме программирования
@@ -1235,8 +1361,7 @@ void IrControlButtonClick(uint8_t func)
 		case RC5MENU: {
 			_flash_LED1(1, 30);
 			display_7code(SYMB_C, ABCD_T[2], ABCD_T[10], ABCD_T[qtTab]); //вывели на экран команду и количество табло С2 - 5 что мы в режиме настроек
-			isSettingsMode = 1; // подняли флаг что мы в режиме настроек но ввод еще не закончен, потому как когда нажали меню мы сбрякаемся из этой функи сразу в проверку окончания ввода
-			isSettingsModeOver = 0; // флаг что ввод еще не окончен
+			isSettingsMode = SETTABCOUNTMODE; // подняли флаг что мы в режиме настроек но ввод еще не закончен, потому как когда нажали меню мы сбрякаемся из этой функи сразу в проверку окончания ввода
 			ADCENABLE = 0; //Зарпещаем измерение датчика освещенности пока находимся в режиме конфигурирования
 			DoBlinking(1); //поморгали ведущим табло в течении 3 секунд
 			cntExitProgMode = cntT1 + (ONEMIN * 5);
@@ -1253,7 +1378,6 @@ void IrControlButtonClick(uint8_t func)
 			break;
 		}
 		default: {
-			//PrintStringWithValToSerial("WRONG BUTTON CLICK!");
 			_flash_LED1(4, 30);
 			break;
 		}
@@ -1265,16 +1389,13 @@ void RCommand (uint8_t func, uint8_t _isSettingsMode) {
 	_flash_LED1(1, 30); //Моргнцть один раз что команда принята с пульта
 	//если мы в режиме настроек то ждем ввод количества табло и выходим из этого режима
 	if (_isSettingsMode == 1) {
-		//PrintStringToSerial("if (_isSettingsMode == 1) OK");
 		SetCountTabs(func); //Задаем количество табло по нажатию кнопки с ИК пульта
 	}
 	else if (_isSettingsMode == 0) {
-		//PrintStringToSerial(" isSettingsMode = 0 OK");
 		//обработчик нажатия кнопки на ИК пульте
 		IrControlButtonClick(func);
 	}
 	else if (_isSettingsMode == 2) {
-		//PrintStringToSerial("  isSettingsMode = 2 OK");
 		//Задаем значения на выбранном табло в режиме настроек или же выбираем следующее табло при повторном нажатии на Power
 		SetSettingsFromIrControl(func);
 	}
@@ -1308,7 +1429,6 @@ void DoBlinkingAllTabs() {
 void ProgrammingModeButtonClick(uint8_t _nTab) {
 	set_Bright(BriValues[MIDDLE_BRIGHT], 4);  //яркость всех табло
 	DoBlinking(_nTab); //начинаем моргать текущим табло (самым первым по индексу Ntab, выше = 1)
-	//PrintStringToSerial("------Set DoBlinking(Ntab) OK   Ntab = ");
 }
 
 void PrintStringWithValToSerial(char* string, uint8_t val)
