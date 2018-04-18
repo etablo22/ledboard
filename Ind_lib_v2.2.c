@@ -44,17 +44,17 @@ uint8_t ABCD_TABLE [MAXDIGNUMBER]= {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x
 //----------------------------------0-----1-----2-----3-----4-----5-----6-----7-----8------9--minus--null---^C--
 //uint8_t CBA_TABLE [MAXDIGNUMBER]= {0xFC, 0x60, 0xDA, 0xF2, 0x66, 0xB6, 0xBE, 0xE0, 0xFE, 0xF6, 0x02, 0x00, 0xC6};
 
-
-//--------------------------------0-------1------2------3------4------5------6------7------8-------9---minus--null----^C--
-uint16_t Dig0 [MAXDIGNUMBER] = {0x1EC0,0x1800,0x1740,0x1D40,0x1980,0x0DC0,0x0FC0,0x1840,0x1FC0,0x1DC0,0x0100,0x0000,0x11C0};
-
-//--------------------------------0-------1------2------3------4------5------6------7------8-------9---minus--null----^C--
-uint16_t Dig1 [MAXDIGNUMBER] = {0x202F,0x0028,0x2036,0x203C,0x0039,0x201D,0x201F,0x2028,0x203F,0x203D,0x0010,0x0000,0x2031};
-
-uint16_t Dig2 [MAXDIGNUMBER] = {0xF401,0xC000,0xB801,0xE801,0xCC00,0x6C01,0x7C01,0xC001,0xFC01,0xEC01,0x0800,0x0000,0x8C01};
-   
-uint16_t Dig3 [MAXDIGNUMBER] = {0x0378,0x0140,0x03B0,0x03E0,0x01C8,0x02E8,0x02F8,0x0340,0x03F8,0x03E8,0x0080,0x0000,0x0388};
-
+// #if LED_TYPE == 1
+// //--------------------------------0-------1------2------3------4------5------6------7------8-------9---minus--null----^C--
+// uint16_t Dig0 [MAXDIGNUMBER] = {0x1EC0,0x1800,0x1740,0x1D40,0x1980,0x0DC0,0x0FC0,0x1840,0x1FC0,0x1DC0,0x0100,0x0000,0x11C0};
+// 
+// //--------------------------------0-------1------2------3------4------5------6------7------8-------9---minus--null----^C--
+// uint16_t Dig1 [MAXDIGNUMBER] = {0x202F,0x0028,0x2036,0x203C,0x0039,0x201D,0x201F,0x2028,0x203F,0x203D,0x0010,0x0000,0x2031};
+// 
+// uint16_t Dig2 [MAXDIGNUMBER] = {0xF401,0xC000,0xB801,0xE801,0xCC00,0x6C01,0x7C01,0xC001,0xFC01,0xEC01,0x0800,0x0000,0x8C01};
+//    
+// uint16_t Dig3 [MAXDIGNUMBER] = {0x0378,0x0140,0x03B0,0x03E0,0x01C8,0x02E8,0x02F8,0x0340,0x03F8,0x03E8,0x0080,0x0000,0x0388};
+// #endif
 
 	//инициализация режима ШИМ
 #if (CONTROLLER_TYPE==0) //CU_v.4.3
@@ -289,13 +289,13 @@ void display_10code (uint8_t D3, uint8_t D2, uint8_t D1, uint8_t D0)
 	//Вывод на цельное табло "prodv2011" в коде ЁПРСТ
 	#if (LED_TYPE==1)
 	{
-		int16_t D01=0;
-		int16_t D23=0;
-		D01|=Dig0[D0]|Dig1[D1];
-		D23|=Dig2[D2]|Dig3[D3];
-		send_data16(D23);
-		send_data16(D01);
-		LATCH_PULSE();
+// 		int16_t D01=0;
+// 		int16_t D23=0;
+// 		D01|=Dig0[D0]|Dig1[D1];
+// 		D23|=Dig2[D2]|Dig3[D3];
+// 		send_data16(D23);
+// 		send_data16(D01);
+// 		LATCH_PULSE();
 	} 
 	//Вывод на табло в коде ABCD
 	#else
@@ -319,13 +319,13 @@ void display_10code_point (uint8_t D3, uint8_t D2, uint8_t D1, uint8_t D0, uint8
 	//Вывод на цельное табло "prodv2011" в коде ЁПРСТ
 	#if (LED_TYPE==1)
 	{
-		int16_t D01=0;
-		int16_t D23=0;
-		D01|=Dig0[D0]|Dig1[D1];
-		D23|=Dig2[D2]|Dig3[D3];
-		send_data16(D23);
-		send_data16(D01);
-		LATCH_PULSE();
+// 		int16_t D01=0;
+// 		int16_t D23=0;
+// 		D01|=Dig0[D0]|Dig1[D1];
+// 		D23|=Dig2[D2]|Dig3[D3];
+// 		send_data16(D23);
+// 		send_data16(D01);
+// 		LATCH_PULSE();
 	}
 	//Вывод на табло в коде ABCD
 	#else
@@ -387,30 +387,30 @@ void display_send(uint8_t dig_num)
 	#elif (LED_TYPE==5)
 		switch (pwc) 
 		{
-			case 1:
-				switch (dig_num){
-					case 1:{send_data8(0x00);send_data8(0x00);send_data8(0x00);send_data8(D[3]);break;}
-					case 2:{send_data8(0x00);send_data8(0x00);send_data8(D[2]);send_data8(0x00);break;}
-					case 3:{send_data8(0x00);send_data8(D[1]);send_data8(0x00);send_data8(0x00);break;}
-					case 4:{send_data8(D[0]);send_data8(0x00);send_data8(0x00);send_data8(0x00);break;}
-				}
-				break;
-			case 2:
-				switch (dig_num){
-					case 1:{send_data8(0x00);send_data8(0x00);send_data8(D[2]);send_data8(D[3]);break;}
-					case 2:{send_data8(0x00);send_data8(D[1]);send_data8(D[2]);send_data8(0x00);break;}
-					case 3:{send_data8(D[0]);send_data8(D[1]);send_data8(0x00);send_data8(0x00);break;}
-					case 4:{send_data8(D[0]);send_data8(0x00);send_data8(0x00);send_data8(D[3]);break;}
-				}
-				break;
-			case 3:
-				switch (dig_num){
-					case 1:{send_data8(0x00);send_data8(D[1]);send_data8(D[2]);send_data8(D[3]);break;}
-					case 2:{send_data8(D[0]);send_data8(D[1]);send_data8(D[2]);send_data8(0x00);break;}
-					case 3:{send_data8(D[0]);send_data8(D[1]);send_data8(0x00);send_data8(D[3]);break;}
-					case 4:{send_data8(D[0]);send_data8(0x00);send_data8(D[2]);send_data8(D[3]);break;}
-				}
-				break;
+// 			case 1:
+// 				switch (dig_num){
+// 					case 1:{send_data8(0x00);send_data8(0x00);send_data8(0x00);send_data8(D[3]);break;}
+// 					case 2:{send_data8(0x00);send_data8(0x00);send_data8(D[2]);send_data8(0x00);break;}
+// 					case 3:{send_data8(0x00);send_data8(D[1]);send_data8(0x00);send_data8(0x00);break;}
+// 					case 4:{send_data8(D[0]);send_data8(0x00);send_data8(0x00);send_data8(0x00);break;}
+// 				}
+// 				break;
+// 			case 2:
+// 				switch (dig_num){
+// 					case 1:{send_data8(0x00);send_data8(0x00);send_data8(D[2]);send_data8(D[3]);break;}
+// 					case 2:{send_data8(0x00);send_data8(D[1]);send_data8(D[2]);send_data8(0x00);break;}
+// 					case 3:{send_data8(D[0]);send_data8(D[1]);send_data8(0x00);send_data8(0x00);break;}
+// 					case 4:{send_data8(D[0]);send_data8(0x00);send_data8(0x00);send_data8(D[3]);break;}
+// 				}
+// 				break;
+// 			case 3:
+// 				switch (dig_num){
+// 					case 1:{send_data8(0x00);send_data8(D[1]);send_data8(D[2]);send_data8(D[3]);break;}
+// 					case 2:{send_data8(D[0]);send_data8(D[1]);send_data8(D[2]);send_data8(0x00);break;}
+// 					case 3:{send_data8(D[0]);send_data8(D[1]);send_data8(0x00);send_data8(D[3]);break;}
+// 					case 4:{send_data8(D[0]);send_data8(0x00);send_data8(D[2]);send_data8(D[3]);break;}
+// 				}
+// 				break;
 			case 4:
 				switch (dig_num){
 					default: {send_data8(D[0]);send_data8(D[1]);send_data8(D[2]);send_data8(D[3]);break;}
