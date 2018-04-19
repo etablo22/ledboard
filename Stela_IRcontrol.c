@@ -1059,11 +1059,9 @@ void setPinCodeManage(uint8_t bCode) {
 		stelaTabPosition = bCode;
 		display_7code(0, ABCD_T[10], ABCD_T[stelaTabPosition], ABCD_T[10]); //вывели параметр который сменили
 	}
-	else if (isSettingsMode == SETPRISEMODE || isSettingsMode == SETTABCOUNTMODE) { //исключаем ложный выход в режимах мастера
-		return;
-	}
-	else ExitButtonClickProgMode(); //если на пульте нажали кнопку отличную от последовательности входа в режим выбора состояния платы то выходим (info-menu-pin-slavemaster)
-		
+	else if (isSettingsMode != SETPRISEMODE && isSettingsMode != SETTABCOUNTMODE) { //исключаем ложный выход в режимах мастера
+		ExitButtonClickProgMode(); //если на пульте нажали кнопку отличную от последовательности входа в режим выбора состояния платы то выходим (info-menu-pin-slavemaster)
+	}		
 }
 
 //Алгоритм установки адреса платы кнопкой на самой плате - для настройки порядка табло на стеле
