@@ -146,7 +146,12 @@ const uint8_t SHIFTGREENBUTTON = 2;//значение на которое сдв
 uint8_t const DASHCODE = 10; //индекс символа минус из массива ABCD_T для функции display_10code_point
 uint8_t const SYMB_SPACEINDX = 11; //индекс символа пробел из массива ABCD_T для функции display_10code_point
 uint8_t const ADCLUXCOUNTER = 100; //количество измерений
-uint16_t j = 0, it1 = 0;
+uint16_t irControlData = 0, it1 = 0;
+const uint8_t WAITTIME = 2; //граница длительности нажатой кнопки кратный 1 секунде
+uint32_t irLongPressTimer = 0; //таймер длительного нажатия
+uint8_t irLongPressCounter = 0; //счетчик длительности нажатия кнопки
+uint8_t irRepeatPressCounter = 0; //счетчик повторов пакетов с ИК пульта
+uint32_t whileLoopCounter = 0; //счетчик глобального цикла
 
 //cntTabloUpdate - таймер обновления данных в регистрах табло
 //cntADCSTART - таймер измерений освещенности через АЦП
@@ -581,7 +586,7 @@ void COMMANDS(uint8_t func) {
 		//прием данных для установки значений на табло
 		case RXTDATA: {
 			_LED1(1);
-			j = 0;
+			uint8_t j = 0;
 			
 			if (USART_GetRxCount() == 0) _delay_ms(200);
 			
@@ -744,7 +749,6 @@ void Initialize(void)
 	digit_sort(2, 3, 0, 1); //сортировка разрядов табло
 	set_PWC(4); //установка режима поразрядной индикации
 	
-	j = 0;
 	it1 = 0;
 	
 	cntTabloUpdate = TabloUpdatePeriod;
@@ -761,7 +765,7 @@ void Initialize(void)
 	SOFTRESET = 0;
 	cntADCSTART = 0;
 	adc_counter = 0;
-	cntExitProgMode = cntT1 + (ONEMIN * 5);
+	cntExitProgMode = cntT1 + ONEMIN;
 	
 	BriMode = 2;
 	BriStep = _getBriStep(BriLevels[BriMode]);
@@ -862,6 +866,7 @@ int main(void)
 			cntTabloUpdate -= cntT1;		//
 			cntExitProgMode -= cntT1;		//
 			cntBlinkTimer -=  cntT1;
+			whileLoopCounter -= cntT1;
 			cntT1 = 0;
 		}
 		
@@ -906,8 +911,8 @@ int main(void)
 			_LED1(1);
 			WRITEEEDIG = 0;
 			cli();
-			for (j = 0; j < 4; j++)
-			eeprom_write_byte(EEDigit + j, Digit[j]);
+			for (uint8_t i = 0; i < 4; i++)
+			eeprom_write_byte(EEDigit + i, Digit[i]);
 			sei();
 			_LED1(0);
 		}
@@ -917,8 +922,8 @@ int main(void)
 			_LED1(1);
 			READEEDIG = 0;
 			cli();
-			for (j = 0; j < 4; j++)
-			Digit[j] = eeprom_read_byte(EEDigit + j);
+			for (uint8_t i = 0; i < 4; i++)
+			Digit[i] = eeprom_read_byte(EEDigit + i);
 			sei();
 			_LED1(0);
 		}
@@ -940,7 +945,8 @@ int main(void)
 		//бесконечная моргалка для табло (период 500 мс)
 		if ((isSettingsMode == SETMASTERSLAVEMODE || 
 			 isSettingsMode == SETPINCODEMODE ||
-			 isSettingsMode == INFOMODESETADDR) && (cntT1 > cntBlinkTimer + MILLIS_500)) {
+			 isSettingsMode == INFOMODESETADDR ||
+			 isSettingsMode == SETPRISEMODE) && (cntT1 > cntBlinkTimer + MILLIS_500)) {
 			if (isBlinked == 0) {
 				set_Bright(BriValues[3], 5); //яркость текущего табло
 				isBlinked = 1;
@@ -951,32 +957,61 @@ int main(void)
 			}
 			cntBlinkTimer = cntT1;
 		}
-		
+						
 		//обработчик команд, поступающих по ИК-
 		if (rc5_data)
 		{
-			j = rc5_data;
-			Rfunc = ((j & 0x3F)|(~j >> 7 & 0x40)); //Выделяем только код команды
-			
-			//если плата в режиме мастера то ловим пульт и обрабатываем команды под мастера
-			if (isMasterDevice)	{
-				RCommand(Rfunc, isSettingsMode);
+			if (irControlData == rc5_data) { //если пришли данные с пульта
+				if (irLongPressTimer > 0) {
+					if (cntT1 > irLongPressTimer + ONESEC) {
+						irLongPressCounter++;
+						irManage();
+					}
+				}
+				else { //при нажатии самый первый раз попадем сюда
+					irRepeatPressCounter++;
+					if (irRepeatPressCounter > 0) {
+						irManage();
+					}
+				}
 			}
-			
-			//настройка редима работы платы устанавливается пультом и на слэйве и на мастере
-			setDeviceType(Rfunc); //Устанавливаем режим работы платы (мастер или слэйв)
-			rc5_data=0;
-			_delay_ms(500);
+			else {
+				irControlData = rc5_data;
+				irRepeatPressCounter = 0;	
+			}
+ 			rc5_data=0;
+			whileLoopCounter = cntT1;
+		}
+		else {
+			if (cntT1 > whileLoopCounter + 150) {
+				irControlData = 0;
+				whileLoopCounter = cntT1;
+				irRepeatPressCounter = 0;
+				irLongPressCounter = 0;
+				irLongPressTimer = 0;
+			}
 		}
 	}//while(1)
 }//main()
+
+void irManage() {
+	Rfunc = ((irControlData & 0x3F)|(~irControlData >> 7 & 0x40)); //Выделяем только код команды
+	
+	//если плата в режиме мастера то ловим пульт и обрабатываем команды под мастера
+	if (isMasterDevice)	{
+		RCommand(Rfunc, isSettingsMode);
+	}
+	//настройка редима работы платы устанавливается пультом и на слэйве и на мастере
+	setDeviceType(Rfunc); //Устанавливаем режим работы платы (мастер или слэйв)
+	irLongPressTimer = cntT1;
+}
 
 //НАстройка режима работы платы с пульта (мастер или слэйв)
 void setDeviceType(uint8_t irCode) {
 	switch(irCode) {
 		case RC5INFO:
 			ADCENABLE = 0; //Зарпещаем измерение датчика освещенности пока находимся в режиме конфигурирования
-			cntExitProgMode = cntT1 + (ONEMIN); //обновили счетчик выхода по таймеру из всех режимов пульта
+			cntExitProgMode = cntT1 + ONEMIN; //обновили счетчик выхода по таймеру из всех режимов пульта
 			infoModeManage(); //меню настройки контроллера - адрес и состояние слэйв-мастер
 			break;
 		case RC5MENU:
@@ -1019,7 +1054,7 @@ void deviceTypeManage() {
 		for (uint8_t i = 0; i < 4; i++) {
 			DigTmp[i] = eeprom_read_byte(EEDevPinCode + i); //заполняем пинкод во временный массив
 		}
-		cntExitProgMode = cntT1 + (ONEMIN); //обновили счетчик выхода по таймеру из всех режимов пульта
+		cntExitProgMode = cntT1 + ONEMIN; //обновили счетчик выхода по таймеру из всех режимов пульта
 		display_7code(ABCD_T[DigTmp[0]], ABCD_T[DigTmp[1]], ABCD_T[DigTmp[2]], ABCD_T[DigTmp[3]]); //вывели пин код на экран
 		isSettingsMode = SETPINCODEMODE; //перешли в режим ввода пинкода
 	}
@@ -1027,7 +1062,7 @@ void deviceTypeManage() {
 
 //проверка правильности ввода пин кода для конфигурирования платы под слэйв-мастер
 void setPinCodeManage(uint8_t bCode) {
-	cntExitProgMode = cntT1 + (ONEMIN); //обновили счетчик выхода по таймеру из всех режимов пульта
+	cntExitProgMode = cntT1 + ONEMIN; //обновили счетчик выхода по таймеру из всех режимов пульта
 	if (isSettingsMode == SETPINCODEMODE) {
 		//проверка на правильность ввода пин кода, если цифра неверная то уходим в стандартный режим
 		if (DigTmp[CountDigitButtonClick] == bCode) {
@@ -1059,9 +1094,19 @@ void setPinCodeManage(uint8_t bCode) {
 		stelaTabPosition = bCode;
 		display_7code(0, ABCD_T[10], ABCD_T[stelaTabPosition], ABCD_T[10]); //вывели параметр который сменили
 	}
-	else if (isSettingsMode != SETPRISEMODE && isSettingsMode != SETTABCOUNTMODE) { //исключаем ложный выход в режимах мастера
+	else if (isSettingsMode == INFOMODEADDR) { //если мы в режиме инфо и сработал признак длительного нажатия на цифру
+		 if (irLongPressCounter >= WAITTIME) {
+			 display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], 0x0F);	//прямое отображение
+			 isSettingsMode = SETPRISEMODE;
+		 }
+		 else if (bCode != stelaTabPosition) ExitButtonClickProgMode();
+	}	
+	else if (isSettingsMode == SETPRISEMODE) {
+		DigitButtonClickProgMode(bCode);
+	}
+	else if (isSettingsMode != SETPRISEMODE && isSettingsMode != SETTABCOUNTMODE && isSettingsMode != INFOMODEADDR) { //исключаем ложный выход в режимах мастера
 		ExitButtonClickProgMode(); //если на пульте нажали кнопку отличную от последовательности входа в режим выбора состояния платы то выходим (info-menu-pin-slavemaster)
-	}		
+	}
 }
 
 //Алгоритм установки адреса платы кнопкой на самой плате - для настройки порядка табло на стеле
@@ -1303,6 +1348,7 @@ void ExitButtonClickProgMode()
 	}
 	if (isSettingsMode == INFOMODESETADDR) {//если режим смены адреса табло (позиции на стеле)
 		eeprom_write_byte(EETab, stelaTabPosition + TADR0);
+		TADR = stelaTabPosition + TADR0;
 	}
 	isSettingsMode = DEFAULTMODE;
 	ADCENABLE = 1;
@@ -1349,13 +1395,13 @@ void IrControlButtonClick(uint8_t func)
 		case RC5POWER:
 		case RC5OK: {
 			_flash_LED1(1, 30); //моргнули светодиодом на плате 1 раз с звдержкой 30мс
-			display_7code(SYMB_C, ABCD_T[1], 0, 0);//вывели на экран команду С1 - что мы в режиме программирования
+			//display_7code(SYMB_C, ABCD_T[1], 0, 0);//вывели на экран команду С1 - что мы в режиме программирования
 			editNtab = 1; //сброс номера табло
 			isSettingsMode = SETPRISEMODE; //если нажали Power или OK то взводим флаг что мы в режиме редактирования текущего табло
-			cntExitProgMode = cntT1 + (ONEMIN * 5);
+			cntExitProgMode = cntT1 + ONEMIN;
 			CountDigitButtonClick = 0; //сброс нажатий на цифры
 			ADCENABLE = 0; //Зарпещаем измерение датчика освещенности пока находимся в режиме программирования
-			ProgrammingModeButtonClick(1); //передали номер нижнего табло
+			ProgrammingModeButtonClick(editNtab); //передали номер нижнего табло
 			break;
 		}
 		//если нажата кнопка меню то переходим в режим настроек
@@ -1365,7 +1411,7 @@ void IrControlButtonClick(uint8_t func)
 			isSettingsMode = SETTABCOUNTMODE; // подняли флаг что мы в режиме настроек но ввод еще не закончен, потому как когда нажали меню мы сбрякаемся из этой функи сразу в проверку окончания ввода
 			ADCENABLE = 0; //Зарпещаем измерение датчика освещенности пока находимся в режиме конфигурирования
 			DoBlinking(1); //поморгали ведущим табло в течении 3 секунд
-			cntExitProgMode = cntT1 + (ONEMIN * 5);
+			cntExitProgMode = cntT1 + ONEMIN;
 			break;
 		}
 		//нажатие кнопки Vol+
@@ -1405,12 +1451,12 @@ void RCommand (uint8_t func, uint8_t _isSettingsMode) {
 void DoBlinking(uint8_t _nTab) {
 	for (uint8_t i = 0; i < 3; i++) {
 		wdt_enable(WDTO_2S); //вочдог таймер на 2 секунды, если зависли то хардресет (не забываем про фьюзы)
-		if (_nTab == 1) set_Bright(BriValues[0], 5); //яркость текущего табло
+		if (TADR == (TADR0 + _nTab)) set_Bright(BriValues[0], 5); //яркость текущего табло
 		
 		TxDATA(TADR0 + _nTab, BRIGHT, BriValues[0], TADR0 + _nTab, BRIGHT, BriValues[0]);
 		_delay_ms(200);
 		
-		if (_nTab == 1) set_Bright(BriValues[11], 5); //яркость текущего табло
+		if (TADR == (TADR0 + _nTab)) set_Bright(BriValues[11], 5); //яркость текущего табло
 		
 		TxDATA(TADR0 + _nTab, BRIGHT, BriValues[11], TADR0 + _nTab, BRIGHT, BriValues[11]);
 		_delay_ms(200);
@@ -1452,7 +1498,7 @@ void EepromWritePrice(uint8_t _nTab)
 	_flash_LED1(1, 30);
 	if (TADR == (TADR0 + _nTab)) {
 		cli();
-		for (j = 0; j < 4; j++)
+		for (uint8_t j = 0; j < 4; j++)
 		eeprom_write_byte(EEDigit + j, Digit[j]);
 		sei();
 	}
