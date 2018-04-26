@@ -138,9 +138,9 @@ const uint8_t DEFAULTMODE = 0, //режим работы платы по умо�
 uint8_t subMenuItem = 0; //временная переменная для хранения пункта меню сервисной настройки
 uint8_t isMasterDevice = 0; //флаг для платы - мастер или слэйв
 uint8_t maskDegVal = 0x0F; //значение маски для включения разрядов
-const uint8_t SHIFTYELLOBUTTON = 3; //значение на которое сдвигаем разряд маски для включения точки
-const uint8_t SHIFTBLUEBUTTON = 1;//значение на которое сдвигаем разряд маски для включения ЭКТО
-const uint8_t SHIFTREDBUTTON = 4;//значение на которое сдвигаем разряд маски для включения СНЕЖИНКА
+const uint8_t SHIFTYELLOBUTTON = 1; //значение на которое сдвигаем разряд маски для включения точки
+const uint8_t SHIFTBLUEBUTTON = 0;//значение на которое сдвигаем разряд маски для включения ЭКТО
+const uint8_t SHIFTREDBUTTON = 3;//значение на которое сдвигаем разряд маски для включения СНЕЖИНКА
 const uint8_t SHIFTGREENBUTTON = 2;//значение на которое сдвигаем разряд маски для включения ЕВРО
 
 uint8_t const DASHCODE = 10; //индекс символа минус из массива ABCD_T для функции display_10code_point
@@ -1078,13 +1078,13 @@ void slaveDigButtonManage(uint8_t bCode) {
 	}
 	else if (isSettingsMode == INFOMODEADDR) { //если мы в режиме инфо и сработал признак длительного нажатия на цифру
 		 if (irLongPressCounter >= WAITTIME) {
-			 display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], 0x0F);	//прямое отображение
+			 display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], maskDegVal);	//прямое отображение
 			 isSettingsMode = SETPRISEMODE;
 			 editNtab = stelaTabPosition; //для редактирование слэйва именно текущего табло надо его выбрать
 		 }
 		 else if (bCode != stelaTabPosition) ExitButtonClickProgMode();
 	}	
-	else if (isSettingsMode == SETPRISEMODE) {
+	else if (isSettingsMode == SETPRISEMODE && !isMasterDevice) { //если в режиме установки цены и мы в слэйве
 		DigitButtonClickProgMode(bCode);
 	}
 	else if (isSettingsMode != SETPRISEMODE && isSettingsMode != SETTABCOUNTMODE && isSettingsMode != INFOMODEADDR) { //исключаем ложный выход в режимах мастера
@@ -1233,19 +1233,19 @@ void SetSettingsFromIrControl(uint8_t func)
 		}
 		
 		case RC5RED: {
-			//ColorButtonsClick(SHIFTREDBUTTON);
+			ColorButtonsClick(SHIFTREDBUTTON);
 			break;
 		}
 		case RC5GREEN: {
-			//ColorButtonsClick(SHIFTGREENBUTTON);
+			ColorButtonsClick(SHIFTGREENBUTTON);
 			break;
 		}
 		case RC5BLUE: {
-			//ColorButtonsClick(SHIFTBLUEBUTTON);
+			ColorButtonsClick(SHIFTBLUEBUTTON);
 			break;
 		}
 		case RC5YELLOW: {
-			//ColorButtonsClick(SHIFTYELLOBUTTON);
+			ColorButtonsClick(SHIFTYELLOBUTTON);
 			break;
 		}
 		
@@ -1268,13 +1268,16 @@ void SetSettingsFromIrControl(uint8_t func)
 	}
 }
 
-void ColorButtonsClick(uint8_t buttonCode)
+void ColorButtonsClick(uint8_t shiftVal)
 {
-	if (maskDegVal & (1 << buttonCode)) {
-		BITCLEAR(maskDegVal, buttonCode);
+	cntExitProgMode = cntT1 + ONEMIN;
+	if ((maskDegVal & (1 << shiftVal)) != 0) {
+		//BITCLEAR(maskDegVal, shiftVal);
+		maskDegVal &= ~(1 << shiftVal);
 	}
 	else {
-		BITSET(maskDegVal, buttonCode);
+		//BITSET(maskDegVal, shiftVal);
+		maskDegVal |= (1 << shiftVal);
 	}
 	display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], maskDegVal);	//прямое отображение
 }
@@ -1363,7 +1366,7 @@ void DigitButtonClickProgMode(uint8_t buttonCode)
 		Digit[1] = DigTmp[1];
 		Digit[2] = DigTmp[2];
 		Digit[3] = DigTmp[3];
-		display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], 0x0F);	//прямое отображение
+		display_10code_point(Digit[0], Digit[1], Digit[2], Digit[3], maskDegVal);	//прямое отображение
 	}
 	//отправка новой цены на редактируемое табло
 	TxDATA(TADR0 + editNtab, RXTDATA, DigTmp[0], DigTmp[1], DigTmp[2], DigTmp[3]);
