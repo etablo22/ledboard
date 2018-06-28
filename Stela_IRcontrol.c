@@ -161,7 +161,7 @@ uint8_t EEMEM EETab[3] = {100, 5, 0};
 uint8_t isSettingsMode = 0; //флаг что мы находимся в режиме настроек
 uint8_t countDigitButtonClick = 0; //флаг первичного нажатия на клавишу цифры на ИК пульте (для обнуления текущего выбранного табло)
 
-uint8_t Digit[4]={5, 6, 7, 8}, PointMask=0x0F, DigTmp[4];
+uint8_t Digit[4]={0, 0, 0, 0}, PointMask=0x0F, DigTmp[4];
 uint8_t EEMEM EEDigit[4] = {0, 0, 0, 0},
 EEDevPinCode[4] = {0, 0, 0, 0}; //пин код для платы (мак адрес)
 
@@ -723,8 +723,7 @@ void Initialize(void)
 	
 	digit_sort(2, 3, 0, 1); //сортировка разрядов табло (для удобства подключения шлейфов на плате)
 	set_PWC(4); //установка режима поразрядной индикации
-	
-	cntTabloUpdate = TabloUpdatePeriod;
+
 	cntT1 = 0;
 	CHBRI = 0;
 	ADCENABLE = 1;			//разрешить преобразования АЦП
@@ -764,7 +763,8 @@ void Initialize(void)
 	_RS485(1);	 //RX_EN + TX_DIS
 
 	_flash_LED1(3, 50);
-	_delay_ms(2000);
+	_delay_ms(1000);
+	cntTabloUpdate = cntT1 + TabloUpdatePeriod;
 }
 
 /* = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = */
@@ -895,8 +895,9 @@ int main(void)
 			_LED1(1);
 			READEEDIG = 0;
 			cli();
-			for (uint8_t i = 0; i < 4; i++)
-			Digit[i] = eeprom_read_byte(EEDigit + i);
+			for (uint8_t i = 0; i < 4; i++) {
+				Digit[i] = eeprom_read_byte(EEDigit + i);
+			}
 			sei();
 			_LED1(0);
 		}
