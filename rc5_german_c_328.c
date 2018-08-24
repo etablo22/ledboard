@@ -1,4 +1,4 @@
-﻿#include "rc5_german.h"
+﻿#include "rc5_german_328.h"
  
 #define RC5TIME 	1.778e-3		// 1.778msec Длительность одного бита
 #define PULSE_MIN	(uchar)(XTAL / 512 * RC5TIME * 0.4 + 0.5)
@@ -13,8 +13,15 @@ uint	rc5_data;//Переменная для результата
 void initRC5()
 {
 	DDRrc5 &=~ _BV(xRC5);
+#if ( (CPU_TYPE == ATMEGA328) || (CPU_TYPE == ATMEGA88) )
+	//for Atmega88 and Atmega328
+	TCCR0B = 1 << CS02; //Деление тактовой частоты на 256
+	TIMSK0 = 1 << TOIE0;	//Разрешаем прерывание по таймеру
+#elif	(CPU_TYPE == ATMEGA8)		
+	//for Atmega8A
 	TCCR0 = 1 << CS02; //Деление тактовой частоты на 256
 	TIMSK = 1 << TOIE0;	//Разрешаем прерывание по таймеру
+#endif
 }
  
 //Обработчик прерывания по таймеру

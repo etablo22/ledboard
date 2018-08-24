@@ -11,7 +11,7 @@
 //  Data........: 6.01.13 
 //
 //***************************************************************************
-#include "usart.h"
+#include "usart_328.h"
 
 //передающий буфер
 static volatile char usartTxBuf[SIZE_BUF_TX];
@@ -46,24 +46,24 @@ void USART_Init(uint8_t regime, uint16_t baudRate)
   rxBufHead = 0;
   rxCount = 0;
   
-  UCSRB = 0;
-  UCSRC = 0;
-  
   if (regime == USART_NORMAL){
-    ubrrValue = F_CPU/(16UL*baudRate) - 1;
+	  ubrrValue = F_CPU/(16UL*baudRate) - 1;
   }
   else{
-    ubrrValue = F_CPU/(8UL*baudRate) - 1;
+	  ubrrValue = F_CPU/(8UL*baudRate) - 1;
   }
   
-  UBRRH = (uint8_t)(ubrrValue >> 8);  
-  UBRRL = (uint8_t)ubrrValue;
+	UCSRB = 0;
+	UCSRC = 0;
+	
+    UBRRH = (uint8_t)(ubrrValue >> 8);
+	UBRRL = (uint8_t)ubrrValue;
+	UCSRA = (1<< (1 & U2X));
+	UCSRB = (1<<RXCIE)|(1<<RXEN)|(1<<TXEN); //разр. прерыв при приеме, разр приема, разр передачи.
+	UCSRC = (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0); //размер слова 8 разрядов
 
-  UCSRA = (1<< (1 & U2X));
-  UCSRB = (1<<RXCIE)|(1<<RXEN)|(1<<TXEN); //разр. прерыв при приеме, разр приема, разр передачи.
-  UCSRC = (1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0); //размер слова 8 разрядов
+	SREG = save;
 
-  SREG = save;
 }
 
 //______________________________________________________________________________

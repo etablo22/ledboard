@@ -9,7 +9,8 @@
 #define	xRC5_IN		PINC//Задаем порт для датчика
 #define	xRC5		PC0	//Задаем ногу порта для датчика
  
-#define	XTAL		14.7456e6//Задаем частоту кварца
+#define	XTAL		16.000e6//Задаем частоту кварца
+//#define	XTAL		14.7456e6//Задаем частоту кварца
 //#define	XTAL		8e6//Задаем частоту кварца
 //#define	XTAL		11.0592e6
 //#define	XTAL		7.3728e6

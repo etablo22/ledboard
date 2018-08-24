@@ -4,7 +4,7 @@
  * Created: 27.07.2015 17:01:41
  *  Author: trainee
  */ 
-#include "ADC_lib.h"
+#include "ADC_lib_328.h"
 #ifndef _delay_us
 #include <util/delay.h>
 #endif

@@ -20,6 +20,35 @@
 #include <avr/pgmspace.h>
 #include <stdint.h>
 
+#if ( (CPU_TYPE == ATMEGA328) || (CPU_TYPE == ATMEGA88) )
+//for Atmega88 and Atmega328
+//USART module
+#define UDR		UDR0
+#define UDRIE	UDRIE0
+#define U2X		U2X0
+
+#define	UCSRA	UCSR0A
+#define	UCSRB	UCSR0B
+#define	UCSRC	UCSR0C
+#define	UBRRH	UBRR0H
+#define	UBRRL	UBRR0L
+
+#define	RXCIE	RXCIE0
+#define	RXEN	RXEN0
+#define	TXEN	TXEN0
+#define	URSEL	UMSEL01
+#define	UCSZ0	UCSZ00
+#define	UCSZ1	UCSZ01
+
+#define USART_TXC_vect USART_TX_vect
+#define USART_RXC_vect USART_RX_vect
+
+#elif	(CPU_TYPE == ATMEGA8)
+//for Atmega8A
+//is default
+#endif
+
+
 #define USART_NORMAL  0
 #define USART_DOUBLED 1
 
