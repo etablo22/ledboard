@@ -60,7 +60,7 @@ void USART_Init(uint8_t regime, uint16_t baudRate); //инициализация
 uint8_t USART_GetTxCount(void); //взять число символов передающего буфера
 void USART_FlushTxBuf(void); //очистить передающий буфер
 void USART_PutChar(char sym); //положить символ в буфер
-void USART_SendStr(char * data); //послать строку из озу по usart`у
+void USART_SendStr(uint8_t *data, uint8_t lenData); //послать строку из озу по usart`у
 void USART_SendStrFl(char const * data); //послать строку из флэша по usart`у
 uint8_t USART_GetRxCount(void); //взять число символов в приемном буфере
 void USART_FlushRxBuf(void); //очистить приемный буфер

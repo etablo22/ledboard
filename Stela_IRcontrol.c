@@ -48,6 +48,7 @@ CountDigitButtonClick - счетчик нажатия цифровых кноп�
 #define RXPRICE		 0xAB	//команда приема данных по адресу (171)
 #define RXWRITEEE    0xAC   //команда на запись в ее установленной цены
 #define RXTDATA7CODE 0xAD   //команда на прием данных в чистом виде без преобразования
+#define MODBUSWRITEAO 0x06  //команда MODBUS Запись одного AO
 #define SETINDIC	 0x96	//установить (показать) режим индикации
 #define SETDSORT	 0x97	//установить (показать) порядок сортировки разрядов табло
 #define SETMODE		 0x98	//установить (показать) режим работы
@@ -188,7 +189,8 @@ uint8_t ABCD_T[MAXDIGNUMBER]= {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0
 #define SYMB_E	0x79 //символ С (аббривиатура команда)
 #define SYMB_L	0x38 //символ С (аббривиатура команда)
 
-uint8_t getADR, UARTcommand, UARTdata;
+uint8_t getADR, UARTcommand;
+uint16_t UARTdata;
 //флаги работы программы
 int8_t TXBRIDATA, TXDATAEN, SOFTRESET, CHBRI;
 uint8_t ADCENABLE;
@@ -555,8 +557,7 @@ void COMMANDS(uint8_t func) {
 			_LED1(1);
 			if (USART_GetRxCount() == 0) _delay_ms(200);
 			if (USART_GetRxCount())	{
-				UARTdata = USART_GetChar();		//чтение значения яркости
-				BriLevels[BriMode] = UARTdata;
+				BriLevels[BriMode] = USART_GetChar();
 				set_Bright(BriLevels[BriMode], 3);
 			}
 			_LED1(0);
@@ -608,6 +609,27 @@ void COMMANDS(uint8_t func) {
 			WRITEEEDIG = 1;
 			break;
 		}
+		case MODBUSWRITEAO: {
+			_LED1(1);
+			if (USART_GetRxCount() == 0) _delay_ms(200);
+			if (USART_GetRxCount())	{
+				UARTdata = (USART_GetChar() << 8);		//чтение старшего байта адреса регистра
+				UARTdata += USART_GetChar();		//чтение младшего байта адреса регистра
+				if (UARTdata == 40001) { //Данные в модуле хранятся в 4ой таблице регистров ЧИТАЙ ПРОТОКОЛ. 
+					Digit[0] = USART_GetChar(); //записываем значение в массив данных
+					Digit[1] = USART_GetChar();
+					//-----------addr---код функции----старший и младший байт адреса регистра--данные---данные----длина ответа
+					modBusAnswer(TADR, MODBUSWRITEAO,        UARTdata >> 8, UARTdata,          Digit[0], Digit[1], 6); //ответ по протоколу MODBUS
+				}
+				else if (UARTdata == 40002) { //Данные в модуле хранятся в 4ой таблице регистров ЧИТАЙ ПРОТОКОЛ. 
+					Digit[2] = USART_GetChar();
+					Digit[3] = USART_GetChar();
+					modBusAnswer(TADR, MODBUSWRITEAO, UARTdata >> 8, UARTdata, Digit[2], Digit[3], 6);
+				}
+			}
+			_LED1(0);
+			break;
+		}
 		//установка режима работы табло - заблокировано
 		//показать номер режима работы
 		// 		case SETMODE: {
@@ -652,10 +674,26 @@ void COMMANDS(uint8_t func) {
 	}
 }
 
+//функция ответа по протоколу MODBUS
+void modBusAnswer(uint8_t addr, uint8_t funcCode, uint8_t data0, uint8_t data1, uint8_t data2, uint8_t data3, uint8_t dataLen) {
+	uint8_t modBusAnswerArr[8] = {addr, funcCode, data0, data1, data2, data3, 0, 0}; //массив ответа, последние 2 байта CRC
+	uint16_t crc16 = CRC16(modBusAnswerArr, dataLen); //вычисляем CRC
+	
+	modBusAnswerArr[dataLen] = crc16;//добавляем вычисленную crc в массив старший и младшие байты
+	modBusAnswerArr[dataLen + 1] = crc16 >> 8;
+	
+	WREEN &= ~0x01; //запретить запись в ЕЕ на время передачи данных
+	_RS485(2); //включаем 485 интерфейс
+	
+	for (uint8_t i = 0; i < dataLen + 2; i++) {
+		USART_PutChar(modBusAnswerArr[i]);
+	}
+	//USART_SendStr(modBusAnswerArr, dataLen + 2); //отвечаем по протоколу
+}
+
 //Прием данных по уарт и запись в массив данных Digit
 void rxDataManage() {
 		uint8_t j = 0;
-				
 		if (USART_GetRxCount() == 0) _delay_ms(200);
 				
 		while ((j < 4) && (USART_GetRxCount()))

@@ -29,6 +29,8 @@ static volatile uint8_t rxCount = 0;
 #error "F_CPU is not defined"
 #endif
 
+#define CRC16_DIVISOR (0xA001)
+#define CRC16_ERROR (0xFFFF)
 
 //инициализация usart`a
 void USART_Init(uint8_t regime, uint16_t baudRate)
@@ -100,10 +102,10 @@ void USART_PutChar(char sym)
 }
 
 //функция посылающая строку из озу по usart`у
-void USART_SendStr(char * data)
+void USART_SendStr(uint8_t *data, uint8_t lenData)
 {
-  char sym;
-  while(*data){
+  uint8_t sym;
+  while(lenData--) {
     sym = *data++;
     USART_PutChar(sym);
   }
@@ -154,7 +156,7 @@ void USART_FlushRxBuf(void)
 char USART_GetChar(void)
 {
   char sym;
-  if (rxCount > 0){                     //если приемный буфер не пустой  
+  if (rxCount > 0) {                     //если приемный буфер не пустой  
     sym = usartRxBuf[rxBufHead];        //прочитать из него символ    
     rxCount--;                          //уменьшить счетчик символов
     rxBufHead++;                        //инкрементировать индекс головы буфера  
@@ -179,4 +181,32 @@ ISR(USART_RXC_vect)
 } 
       
 
+/***********************************************
+* ---> pData - msg to be protected             *
+* ---> size - msg size in bytes                *
+* <--- crc16                                   *
+***********************************************/
+uint16_t CRC16(uint8_t *pData, uint8_t size)
+{
+	
+	uint16_t retval   = CRC16_ERROR;
+	uint8_t  i, tmp;
+	
+	if (!size)
+	return retval;
 
+	do
+	{
+		retval ^= *pData++;
+		for( i = 0; i < 8; i++)
+		{
+			tmp = retval & 0x01;
+			retval >>= 1;
+			if (tmp)
+			{
+				retval ^= CRC16_DIVISOR;
+			}
+		}
+	} while (--size);
+	return retval;
+}
