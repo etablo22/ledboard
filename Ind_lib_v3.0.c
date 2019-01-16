@@ -24,13 +24,8 @@
  v.3.0	- оставляем индикацию только для контроллера CDigit4x по типу LED_TYPE==5
 */
 
+
 #include "Ind_lib_v3.0.h"
-
-//1 знак справа
-
-//----------------------------------0-----1-----2-----3-----4-----5-----6-----7-----8------9--minus--null---^C--
-uint8_t ABCD_TABLE [MAXDIGNUMBER]= {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x40, 0x00, 0x63};
-
 
 //инициализация режима ШИМ
 void initPWM()
@@ -137,7 +132,7 @@ void display_7code (uint8_t Dig3, uint8_t Dig2, uint8_t Dig1, uint8_t Dig0)
 void display_10code (uint8_t D3, uint8_t D2, uint8_t D1, uint8_t D0)
 {
 	//Вывод на табло в коде ABCD
-	display_7code (ABCD_TABLE[D3], ABCD_TABLE[D2], ABCD_TABLE[D1], ABCD_TABLE[D0]);
+	display_7code (ABCD_T[D3], ABCD_T[D2], ABCD_T[D1], ABCD_T[D0]);
 // 	DigitArr[Dsort[0]]=ABCD_TABLE[D0];
 // 	DigitArr[Dsort[1]]=ABCD_TABLE[D1];
 // 	DigitArr[Dsort[2]]=ABCD_TABLE[D2];
@@ -149,10 +144,10 @@ void display_10code (uint8_t D3, uint8_t D2, uint8_t D1, uint8_t D0)
 void display_10code_point (uint8_t D3, uint8_t D2, uint8_t D1, uint8_t D0, uint8_t pointmask)
 {
 	//стандартное расположение разрядов
-	DigitArr[Dsort[0]]=ABCD_TABLE[D0]|((pointmask<<7)&0x80);		//сложно обойтись без сдвига, т.к. с разными масками устанавливаются разные биты
-	DigitArr[Dsort[1]]=ABCD_TABLE[D1]|((pointmask<<6)&0x80);
-	DigitArr[Dsort[2]]=ABCD_TABLE[D2]|((pointmask<<5)&0x80);
-	DigitArr[Dsort[3]]=ABCD_TABLE[D3]|((pointmask<<4)&0x80);
+	DigitArr[Dsort[0]]=ABCD_T[D0]|((pointmask<<7)&0x80);		//сложно обойтись без сдвига, т.к. с разными масками устанавливаются разные биты
+	DigitArr[Dsort[1]]=ABCD_T[D1]|((pointmask<<6)&0x80);
+	DigitArr[Dsort[2]]=ABCD_T[D2]|((pointmask<<5)&0x80);
+	DigitArr[Dsort[3]]=ABCD_T[D3]|((pointmask<<4)&0x80);
 }
 
 void DigitSorting (uint8_t DigitNumber, uint8_t DigitValue)

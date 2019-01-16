@@ -79,6 +79,8 @@ uint16_t const LUM3 = 580;
 uint16_t const LUM4 = 620;
 #define MIDDLE_BRIGHT 3 //индекс для массива значений яркости табло (среднее)
 
+
+
 //общие константы
 #define TabloUpdatePeriod		1000 //1 ед. = 4,4мс при TCCRB = 0x01 в Initialize : initT1(0x01)
 //1 ед. = 35мс при TCCRB = 0x02 в Initialize : initT1(0x02)
@@ -176,18 +178,6 @@ preBriMode,
 BriLevels[3] = {5, 95, 214},
 BriValues[12] = {5, 30, 40, 50, 62, 77, 95, 118, 146, 181, 214, 250},
 BriStep = 0;
-
-//-------------------------------0-----1-----2-----3-----4-----5-----6-----7-----8------9--minus--null---^C--
-uint8_t ABCD_T[MAXDIGNUMBER]= {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x40, 0x00, 0x63};
-#define SYMB_C	0x39 //символ С (аббривиатура команда)
-#define SYMB_I	0x30 //символ С (аббривиатура команда)
-#define SYMB_n	0x54 //символ С (аббривиатура команда)
-#define SYMB_F	0x71 //символ С (аббривиатура команда)
-#define SYMB_o	0x5c //символ С (аббривиатура команда)
-#define SYMB_P	0x73 //символ С (аббривиатура команда)
-#define SYMB_i	0x10 //символ С (аббривиатура команда)
-#define SYMB_E	0x79 //символ С (аббривиатура команда)
-#define SYMB_L	0x38 //символ С (аббривиатура команда)
 
 uint8_t getADR, UARTcommand;
 uint16_t UARTdata;
@@ -615,13 +605,13 @@ void COMMANDS(uint8_t func) {
 			if (USART_GetRxCount())	{
 				UARTdata = (USART_GetChar() << 8);		//чтение старшего байта адреса регистра
 				UARTdata += USART_GetChar();		//чтение младшего байта адреса регистра
-				if (UARTdata == 40001) { //Данные в модуле хранятся в 4ой таблице регистров ЧИТАЙ ПРОТОКОЛ. 
+				if (UARTdata == 0x0001) { //Данные в модуле хранятся в 4ой таблице регистров ЧИТАЙ ПРОТОКОЛ. 
 					Digit[0] = USART_GetChar(); //записываем значение в массив данных
 					Digit[1] = USART_GetChar();
 					//-----------addr---код функции----старший и младший байт адреса регистра--данные---данные----длина ответа
 					modBusAnswer(TADR, MODBUSWRITEAO,        UARTdata >> 8, UARTdata,          Digit[0], Digit[1], 6); //ответ по протоколу MODBUS
 				}
-				else if (UARTdata == 40002) { //Данные в модуле хранятся в 4ой таблице регистров ЧИТАЙ ПРОТОКОЛ. 
+				else if (UARTdata == 0x0002) { //Данные в модуле хранятся в 4ой таблице регистров ЧИТАЙ ПРОТОКОЛ. 
 					Digit[2] = USART_GetChar();
 					Digit[3] = USART_GetChar();
 					modBusAnswer(TADR, MODBUSWRITEAO, UARTdata >> 8, UARTdata, Digit[2], Digit[3], 6);
@@ -992,6 +982,7 @@ int main(void)
 			}
 			sei();
 			_LED1(0);
+			checkBitMask();
 		}
 		
 		if (USART_GetRxCount()) {	//проверка наличия данных в буфере приема UART
@@ -1083,7 +1074,33 @@ void irManage() {
 	}
 	//настройка редима работы платы устанавливается пультом и на слэйве и на мастере
 	setDeviceType(Rfunc); //Устанавливаем режим работы платы (мастер или слэйв)
+	//проверка цветных кнопок в режиме редактирования цены
+	if (isSettingsMode == SETPRISEMODE) {
+		checkColorButton(Rfunc);
+	}
 	irLongPressTimer = cntT1;
+}
+
+//проверка цветных кнопок в режиме редактирования цены
+void checkColorButton(uint8_t irCode) {
+	switch(irCode) {
+		case RC5RED: {
+			ColorButtonsClick(SHIFTREDBUTTON);
+			break;
+		}
+		case RC5GREEN: {
+			ColorButtonsClick(SHIFTGREENBUTTON);
+			break;
+		}
+		case RC5BLUE: {
+			ColorButtonsClick(SHIFTBLUEBUTTON);
+			break;
+		}
+		case RC5YELLOW: {
+			ColorButtonsClick(SHIFTYELLOBUTTON);
+			break;
+		}
+	}
 }
 
 //НАстройка режима работы платы с пульта (мастер или слэйв)
@@ -1122,7 +1139,7 @@ void setDeviceType(uint8_t irCode) {
 		}
 		case RC5EXIT:
 			ExitButtonClickProgMode();		//запуск процедуры выхода из режима программирования
-			break;
+			break;	
 	}
 }
 
@@ -1198,7 +1215,7 @@ void slaveDigButtonManage(uint8_t bCode) {
 		 }
 		 else if (bCode != stelaTabPosition) ExitButtonClickProgMode();
 	}	
-	else if (isSettingsMode == SETPRISEMODE && !isMasterDevice) { //если в режиме установки цены и мы в слэйве
+	else if (isSettingsMode == SETPRISEMODE && !isMasterDevice) { //если в режиме установки цены и мы в слэйве		
 		DigitButtonClickProgMode(bCode);
 	}
 	else if (isSettingsMode != SETPRISEMODE && 
@@ -1349,23 +1366,6 @@ void SetSettingsFromIrControl(uint8_t func)
 			break;
 		}
 		
-		case RC5RED: {
-			ColorButtonsClick(SHIFTREDBUTTON);
-			break;
-		}
-		case RC5GREEN: {
-			ColorButtonsClick(SHIFTGREENBUTTON);
-			break;
-		}
-		case RC5BLUE: {
-			ColorButtonsClick(SHIFTBLUEBUTTON);
-			break;
-		}
-		case RC5YELLOW: {
-			ColorButtonsClick(SHIFTYELLOBUTTON);
-			break;
-		}
-		
 		case RC5DIG0:
 		case RC5DIG1:
 		case RC5DIG2:
@@ -1385,6 +1385,16 @@ void SetSettingsFromIrControl(uint8_t func)
 	}
 }
 
+//проверяем маску для точек
+void checkBitMask() {
+	maskDegVal = 0x00;
+	for (uint8_t i = 0; i < sizeof(Digit); i++) { //проверяем массив цифр включена ли  них точка
+		if (Digit[i] & 0x80) { //смотрим старший 8й бит установлени или нет, если не установлен то сбрасываем маску
+			maskDegVal |= (1 << i);
+		}
+	}
+}
+
 void ColorButtonsClick(uint8_t shiftVal)
 {
 	cntExitProgMode = cntT1 + ONEMIN;
@@ -1396,11 +1406,9 @@ void ColorButtonsClick(uint8_t shiftVal)
 	Digit[3] = Digit[3] & 0x7F;
 	
 	if ((maskDegVal & (1 << shiftVal)) != 0) {
-		//BITCLEAR(maskDegVal, shiftVal);
 		maskDegVal &= ~(1 << shiftVal);
 	}
 	else {
-		//BITSET(maskDegVal, shiftVal);
 		maskDegVal |= (1 << shiftVal);
 	}
 	//стандартное расположение разрядов
@@ -1409,6 +1417,7 @@ void ColorButtonsClick(uint8_t shiftVal)
 	Digit[2] = Digit[2] | ((maskDegVal << 5) & 0x80);
 	Digit[3] = Digit[3] | ((maskDegVal << 4) & 0x80);
 	display_7code(Digit[0], Digit[1], Digit[2], Digit[3]);	//прямое отображение
+	EepromWritePrice(editNtab);
 }
 
 void PowerButtonClickProgMode()
@@ -1489,15 +1498,17 @@ void DigitButtonClickProgMode(uint8_t buttonCode)
 		DigTmp[countDigitButtonClick + 3] = DASHCODE;
 		countDigitButtonClick = 1;
 	}
+	
 	//если редактируемое табло - текущее табло, то изменяем значения
 	if (TADR == (TADR0 + editNtab)) {
 		//преобразовываем массив чисел в массив кодов этих чисел 7 сегментного индикатора
-		Digit[0]=ABCD_T[DigTmp[0]]|((maskDegVal<<7) & 0x80);		//сложно обойтись без сдвига, т.к. с разными масками устанавливаются разные биты
-		Digit[1]=ABCD_T[DigTmp[1]]|((maskDegVal<<6) & 0x80);
-		Digit[2]=ABCD_T[DigTmp[2]]|((maskDegVal<<5) & 0x80);
-		Digit[3]=ABCD_T[DigTmp[3]]|((maskDegVal<<4) & 0x80);
+		Digit[0] = ABCD_T[DigTmp[0]] | ((maskDegVal<<7) & 0x80);		//сложно обойтись без сдвига, т.к. с разными масками устанавливаются разные биты
+		Digit[1] = ABCD_T[DigTmp[1]] | ((maskDegVal<<6) & 0x80);
+		Digit[2] = ABCD_T[DigTmp[2]] | ((maskDegVal<<5) & 0x80);
+		Digit[3] = ABCD_T[DigTmp[3]] | ((maskDegVal<<4) & 0x80);
 		display_7code(Digit[0], Digit[1], Digit[2], Digit[3]);
 	}
+	
 	//отправка новой цены на редактируемое табло
 	TxDATA(TADR0 + editNtab, RXPRICE, DigTmp[0], DigTmp[1], DigTmp[2], DigTmp[3]);
 	_delay_ms(300);

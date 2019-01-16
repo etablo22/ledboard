@@ -32,6 +32,7 @@
 
 	#include <avr/io.h>
 	#include <avr/interrupt.h>
+	#include "Stela_IRControl_.h"
 	
 	#define PORT_595	PORTD
 	#define DDR_595		DDRD 		
@@ -45,8 +46,6 @@
 	#define OE1 		PB1			// OE сдвигового регистра 2
 	#define OE2 		PB2			// OE сдвигового регистра 3
 	#define OE3 		PB3			// OE сдвигового регистра 4
-
-	#define MAXDIGNUMBER 13 // максимальный код символа в таблицах символов табло
 
 //константа pwc для квазидинамической поразрядной индикации 
 // количество одновременно включенных разрядов (при pwc=1 - аналог динамической индикации, pwc=4 - статической)
