@@ -25,6 +25,10 @@ CountDigitButtonClick - счетчик нажатия цифровых кноп�
 	20180610	:	переход на Atmega328P FCPU = 16.000 MHz
 				:	упрощаем библиотеку вывода данных на индикаторы IndLib >> v3.0
 				:	меняем имена регистров:
+				
+20190517		:	правка Initialize - перенос в main отображения ELPI
+				:	доюавлена в Initialize очистка буфера приема USART_FlushRxBuf();
+				
 */
 
 #include "config.h"
@@ -274,24 +278,24 @@ uint8_t _CORRECT(uint8_t code, uint8_t digit, int8_t codetype)
 	//3: ABCD - код 7-сегментного индикатора
 	//4: Pult_code - кодировка пульта (Кузьмин П.В.)
 	switch (codetype) {
-		// 		case 1: {
-		// 			if ((tdata >= 0) && (tdata <= MAXDIGNUMBER)) code=tdata;
-		// 			break;	//корректное значение цифры
-		// 		}
-		// 		case 2:	{
-		// 			code = _ascii2dec(tdata);
-		// 			break;
-		// 		}								//преобразование из формата ASCII
-		// 		case 3: {
-		// 			code = _ABCD2dec(tdata);
-		// 			break;
-		// 		}								//преобразование из кода 7-сегм.
-		// 		case 4: {
-		// 			code = _CONVERT_pult_code(tdata);
-		// 			break;
-		// 		}						//преобразование из кода Pult_code
+// 		case 1: {
+// 			if ((tdata >= 0) && (tdata <= MAXDIGNUMBER)) code=tdata;
+// 			break;	//корректное значение цифры
+// 		}
+// 		case 2:	{
+// 			code = _ascii2dec(tdata);
+// 			break;
+// 		}								//преобразование из формата ASCII
+// 		case 3: {
+// 			code = _ABCD2dec(tdata);
+// 			break;
+// 		}								//преобразование из кода 7-сегм.
+// 		case 4: {
+// 			code = _CONVERT_pult_code(tdata);
+// 			break;
+// 		}						//преобразование из кода Pult_code
 		default: {
-			if ((tdata >= 0) && (tdata <= MAXDIGNUMBER)) code=tdata;				//корректное значение цифры
+			if ((tdata >= 0) && (tdata <= MAXDIGNUMBER)) code = tdata;				//корректное значение цифры
 			else if ((tdata > 0x29) && (tdata < 0x40)) code = _ascii2dec(tdata);			//преобразование из формата ASCII
 			break;
 		}
@@ -379,12 +383,18 @@ void TxDATA(uint8_t TXADR, uint8_t Command, uint8_t Data0, uint8_t Data1, uint8_
 {
 	WREEN &= ~0x01; //запретить запись в ЕЕ на время передачи данных
 	_RS485(2);
+	_delay_us(200);
 	USART_PutChar(TXADR);
+	_delay_us(200);
 	USART_PutChar(Command);
+	_delay_us(200);
 	USART_PutChar(Data0);
+	_delay_us(200);
 	USART_PutChar(Data1);
+	_delay_us(200);
 	USART_PutChar(Data2);
-	USART_PutChar(Data3);
+	_delay_us(200);
+	USART_PutChar(Data3);	
 }
 
 
@@ -579,10 +589,12 @@ void COMMANDS(uint8_t func) {
 			_LED1(1);
 			rxDataManage();//Приняли по уарт данные
 			//преобразовываем массив чисел в массив кодов этих чисел 7 сегментного индикатора
-			Digit[0] = ABCD_T[Digit[0]] | ((maskDegVal << 7) & 0x80);		//сложно обойтись без сдвига, т.к. с разными масками устанавливаются разные биты
-			Digit[1] = ABCD_T[Digit[1]] | ((maskDegVal << 6) & 0x80);
-			Digit[2] = ABCD_T[Digit[2]] | ((maskDegVal << 5) & 0x80);
-			Digit[3] = ABCD_T[Digit[3]] | ((maskDegVal << 4) & 0x80);
+			
+			Digit[0] = ABCD_T[DigTmp[0]] | ((maskDegVal << 7) & 0x80);		//добавляем точку: сложно обойтись без сдвига, т.к. с разными масками устанавливаются разные биты
+			Digit[1] = ABCD_T[DigTmp[1]] | ((maskDegVal << 7) & 0x80);		//добавляем точку: сложно обойтись без сдвига, т.к. с разными масками устанавливаются разные биты
+			Digit[2] = ABCD_T[DigTmp[2]] | ((maskDegVal << 7) & 0x80);		//добавляем точку: сложно обойтись без сдвига, т.к. с разными масками устанавливаются разные биты	
+			Digit[3] = ABCD_T[DigTmp[3]] | ((maskDegVal << 7) & 0x80);		//добавляем точку: сложно обойтись без сдвига, т.к. с разными масками устанавливаются разные биты
+	
 			display_7code(Digit[0], Digit[1], Digit[2], Digit[3]);
 			_LED1(0);
 			break;
@@ -591,6 +603,11 @@ void COMMANDS(uint8_t func) {
 		case RXTDATA7CODE: {
 			_LED1(1);
 			rxDataManage();//Приняли по уарт данные
+			Digit[0] = DigTmp[0];
+			Digit[1] = DigTmp[1];
+			Digit[2] = DigTmp[2];
+			Digit[3] = DigTmp[3];
+			
 			display_7code(Digit[0], Digit[1], Digit[2], Digit[3]);
 			_LED1(0);
 			break;
@@ -689,9 +706,9 @@ void rxDataManage() {
 		while ((j < 4) && (USART_GetRxCount()))
 		{
 			//чтение цифры из буфера
-			Digit[j] = USART_GetChar(); //запись в ОЗУ скорректированного значения
+			DigTmp[j] = USART_GetChar(); //запись в ОЗУ скорректированного значения
 			j++;	
-			if (USART_GetRxCount() == 0) _delay_ms(200);
+			if (USART_GetRxCount() == 0) _delay_ms(300);
 		}		
 }
 
@@ -817,10 +834,8 @@ void Initialize(void)
 	adc_init();
 	USART_Init(USART_DOUBLED, 19200);
 	USART_FlushTxBuf();
+	USART_FlushRxBuf();
 
-	//display_dnum(TADR);
-	display_7code(SYMB_E, SYMB_L, SYMB_P, SYMB_I); //вывели на экран режим мастер-слэйв
-	
 	TXDATAEN |= 0x02;	//разрешение TX глобально (2й бит)
 	//	TXDATAEN &=~ 0x02;	//запрещение TX глобально (2й бит)
 	WREEN |= 0x02;		//разрешить запись яркости в ЕЕ
@@ -829,7 +844,6 @@ void Initialize(void)
 	_RS485(1);	 //RX_EN + TX_DIS
 
 	_flash_LED1(3, 50);
-	_delay_ms(1000);
 	cntTabloUpdate = cntT1 + TabloUpdatePeriod;
 }
 
@@ -854,7 +868,10 @@ void readEepData() {
 int main(void)
 {
 	Initialize();
+	display_7code(SYMB_E, SYMB_L, SYMB_P, SYMB_I); //вывели на экран режим мастер-слэйв
+	_delay_ms(1000);
 	setBoardAddr(); //установка адреса табло перед главным циклом
+	//display_dnum(TADR);
 
 	while(1)
 	{
@@ -909,7 +926,9 @@ int main(void)
 				WRITEEEBRI = 0;
 				CHBRI = 0;
 				cli();
+				_delay_ms(10);
 				eeprom_write_byte(EEBriData + BriMode, BriLevels[BriMode]); //сохранение яркости только для текущего режима
+				_delay_ms(10);
 				sei();
 				_LED1(0);
 			}
@@ -966,8 +985,11 @@ int main(void)
 			_LED1(1);
 			WRITEEEDIG = 0;
 			cli();
-			for (uint8_t i = 0; i < 4; i++)
-			eeprom_write_byte(EEDigit + i, Digit[i]);
+			_delay_ms(10);
+			for (uint8_t i = 0; i < 4; i++) {
+				eeprom_write_byte(EEDigit + i, Digit[i]);
+				_delay_ms(10);
+			}
 			sei();
 			_LED1(0);
 		}
@@ -977,8 +999,10 @@ int main(void)
 			_LED1(1);
 			READEEDIG = 0;
 			cli();
+			_delay_ms(10);
 			for (uint8_t i = 0; i < 4; i++) {
 				Digit[i] = eeprom_read_byte(EEDigit + i);
+				_delay_ms(10);
 			}
 			sei();
 			_LED1(0);
@@ -1511,6 +1535,7 @@ void DigitButtonClickProgMode(uint8_t buttonCode)
 	
 	//отправка новой цены на редактируемое табло
 	TxDATA(TADR0 + editNtab, RXPRICE, DigTmp[0], DigTmp[1], DigTmp[2], DigTmp[3]);
+	USART_PutChar(0);
 	_delay_ms(300);
 }
 
@@ -1593,8 +1618,10 @@ void EepromWritePrice(uint8_t _nTab)
 {
 	if (TADR == (TADR0 + _nTab)) {
 		cli();
+		_delay_ms(10);
 		for (uint8_t j = 0; j < 4; j++)
 		eeprom_write_byte(EEDigit + j, Digit[j]);
+		_delay_ms(10);
 		sei();
 	}
 	//команда RX на сохранение в ЕЕ на редактируемом табло

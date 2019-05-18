@@ -1,7 +1,7 @@
 ﻿#ifndef STELA_IRCONTROL_H_
 #define STELA_IRCONTROL_H_
 
-#define GLASHATAY	1		//решение под цифры глашатай
+#define GLASHATAY	0		//решение под цифры глашатай
 #define MAXDIGNUMBER 13 // максимальный код символа в таблицах символов табло
 
 //------   -------------------------0-----1-----2-----3-----4-----5-----6-----7-----8------9--minus--null---^C--

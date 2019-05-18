@@ -170,9 +170,9 @@ volatile uint8_t block = 0;
 
 //прерывание по завершению приема
 ISR(USART_RXC_vect) 
-{
+{ 
     char data = UDR;
-    if (rxCount < SIZE_BUF_RX){                    //если в буфере еще есть место   
+    if (rxCount < SIZE_BUF_RX) {                    //если в буфере еще есть место   
       usartRxBuf[rxBufTail] = data;                //считать символ из UDR в буфер
       rxBufTail++;                                 //увеличить индекс хвоста приемного буфера 
       if (rxBufTail == SIZE_BUF_RX) rxBufTail = 0;  
